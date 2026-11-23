@@ -1,0 +1,28 @@
+/* Store map (components/StoreMap.tsx). Shared by the home and /analysis, so it lives in global CSS. */
+.storemap { display: grid; gap: var(--space-2xs); min-width: 0; }
+.storemap__wrap { position: relative; isolation: isolate; }
+.storemap__frame { height: var(--storemap-h, 360px); border: var(--rule-hair) solid var(--color-rule); border-radius: var(--radius-panel); background: var(--color-bg); overflow: hidden; z-index: 0; }
+.storemap__frame--loading { height: var(--storemap-h, 360px); }
+.storemap__count { font-size: var(--text-xs); color: var(--color-muted); font-variant-numeric: tabular-nums; }
+.storemap__fit { position: absolute; left: var(--space-xs); top: var(--space-xs); z-index: 500; display: inline-flex; align-items: center; min-height: 44px; padding: 0 var(--space-md); border: var(--rule-hair) solid var(--color-rule); border-radius: var(--radius-pill); background: var(--color-panel); color: var(--color-ink); font: 600 var(--text-sm)/1 var(--font-body); cursor: pointer; transition: background-color var(--dur-micro) var(--ease-out); }
+.storemap__fit:hover { background: var(--color-bg); }
+.storemap__fit:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+
+/* A light grey base map: OSM standard tiles, desaturated and lifted so road and station names stay legible */
+.storemap__tiles { filter: grayscale(1) brightness(1.06) contrast(0.92); }
+
+/* Pins: a hollow blue ring; the selected pin fills blue and takes a thick ink border, so colour is never the only cue */
+.smpin { display: grid; place-items: center; background: none; border: 0; }
+.smpin__dot { display: block; width: 16px; height: 16px; border-radius: 50%; background: var(--color-panel); border: 3px solid var(--color-data); }
+.smpin.is-selected .smpin__dot { width: 26px; height: 26px; background: var(--color-data); border: 4px solid var(--color-ink); }
+.smpin:focus-visible { outline: 3px solid var(--color-focus); outline-offset: -4px; border-radius: 50%; }
+.smme { display: grid; place-items: center; }
+.smme__dot { display: block; width: 18px; height: 18px; border-radius: 4px; background: var(--color-ink); border: 4px solid var(--color-panel); outline: 1px solid var(--color-ink); }
+
+/* Leaflet chrome sized for touch */
+.storemap .leaflet-container { font-family: var(--font-body); background: var(--color-bg); }
+.storemap .leaflet-control-zoom.leaflet-bar a { width: 44px; height: 44px; line-height: 44px; font-size: 20px; color: var(--color-ink); background: var(--color-panel); }
+.storemap .leaflet-control-zoom.leaflet-bar a:focus-visible { outline: 2px solid var(--color-focus); outline-offset: -2px; }
+.storemap .leaflet-control-attribution { font-size: var(--text-xs); color: var(--color-ink-2); background: color-mix(in oklab, var(--color-panel) 88%, transparent); padding: 0 var(--space-xs); }
+.storemap .leaflet-control-attribution a { display: inline-flex; align-items: center; min-height: 44px; color: var(--color-ink); }
+.storemap .leaflet-control-attribution a:focus-visible { outline: 2px solid var(--color-focus); outline-offset: -2px; }

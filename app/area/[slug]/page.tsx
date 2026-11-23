@@ -46,9 +46,9 @@ async function Report({ params }: { params: PageProps<"/area/[slug]">["params"] 
         {area.centerName} 근처 가게를 업종별로 시군구 매출 순위가 높은 순서로 5곳씩 보여 줍니다. 프랜차이즈는 뒤로 내렸습니다.
       </p>
       <p className="report__cta">
-        <a className="btn btn--primary" href={`/?area=${area.slug}&occ=hoesik`}>
-          이 상권에서 모임 자리 3곳 고르기
-        </a>
+        <Link className="btn btn--primary" prefetch={false} href={`/?${new URLSearchParams({ area: area.slug }).toString()}`}>
+          이 상권 지도에서 고르기
+        </Link>
       </p>
       {r.groups.map((g) => (
         <section key={g.group.slug} className="report__group" aria-labelledby={`g-${g.group.slug}`}>
@@ -94,7 +94,7 @@ export default function AreaPage({ params }: PageProps<"/area/[slug]">) {
   return (
     <main id="main" className="report container">
       <nav className="crumbs" aria-label="위치">
-        <Link href="/area">상권별 결제 랭킹</Link>
+        <Link prefetch={false} href="/area">상권별 결제 랭킹</Link>
       </nav>
       <Suspense fallback={<ReportSkeleton />}>
         <Report params={params} />

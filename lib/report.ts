@@ -5,7 +5,7 @@
 import type { AreaPreset } from "./areas";
 import type { EatplItem, SearchFn, SearchParams } from "./eatpl";
 import { isFranchise } from "./franchise";
-import { WEEKDAYS, customerLabel } from "./labels";
+import { customerLabel } from "./labels";
 import { type CallStats, cleanItems, distanceFrom, fetchAll, planGrid, rankOf, sigunguOf, withinRadius } from "./pool";
 
 export type Group = { slug: string; name: string; categories: string[] };
@@ -107,7 +107,3 @@ export async function groupReport(area: AreaPreset, group: Group, search: Search
   return { area, group, rows: rankRows(r.pool).slice(0, 20), radius: r.radius, sample, summary, calls };
 }
 
-/** 평일 피크 곳 수(요약 문장용) */
-export function weekdayCount(t: Tally): number {
-  return t.filter((x) => (WEEKDAYS as readonly string[]).includes(x.label)).reduce((s, x) => s + x.count, 0);
-}

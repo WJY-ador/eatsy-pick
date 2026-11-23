@@ -1,0 +1,511 @@
+/* 방문 기록과 다음 약속. 색과 서체는 계약 토큰만 쓴다.
+   파랑(--color-data)은 선택 상태와 내 기록 점에만, 오렌지(--color-cta)는 잇플 CTA에만 쓴다. */
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+.note {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--color-muted);
+}
+
+/* 버튼 공통: 터치 44px 이상, focus-visible */
+.btn,
+.btnQuiet,
+.btnDanger,
+.save,
+.chip,
+.nameBtn,
+.cta {
+  min-height: 44px;
+  font: inherit;
+  font-family: var(--font-body);
+  font-size: 0.9375rem;
+  line-height: 1.2;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.btn,
+.save {
+  padding: 0 16px;
+  border: 1px solid var(--color-ink-2);
+  background: var(--color-panel);
+  color: var(--color-ink);
+}
+
+.btnQuiet {
+  min-width: 44px;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--color-ink-2);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.btnDanger {
+  padding: 0 16px;
+  border: 1px solid var(--color-ink);
+  background: var(--color-ink);
+  color: var(--color-panel);
+}
+
+.save[aria-pressed="true"] {
+  border-color: var(--color-data);
+  color: var(--color-data);
+  font-weight: 600;
+}
+
+.chip {
+  min-width: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--color-rule);
+  background: var(--color-panel);
+  color: var(--color-ink-2);
+}
+
+.chip[aria-pressed="true"] {
+  border-color: var(--color-data);
+  background: var(--color-data);
+  color: var(--color-data-ink);
+  font-weight: 600;
+}
+
+.nameBtn {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--color-ink);
+  font-weight: 700;
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-color: var(--color-muted);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 4px;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+/* 잇플 CTA(MerLink에 className으로만 넘긴다. 핸들러 없음) */
+.cta {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 16px;
+  border: 0;
+  background: var(--color-cta);
+  color: var(--color-cta-ink);
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.btn:focus-visible,
+.btnQuiet:focus-visible,
+.btnDanger:focus-visible,
+.save:focus-visible,
+.chip:focus-visible,
+.nameBtn:focus-visible,
+.cta:focus-visible,
+.planTitle:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+@media (hover: hover) {
+  .btn:hover,
+  .save:hover,
+  .chip:hover {
+    border-color: var(--color-ink);
+  }
+  .chip[aria-pressed="true"]:hover {
+    border-color: var(--color-data);
+  }
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+/* VisitControls */
+.controls {
+  display: grid;
+  gap: 12px;
+  color: var(--color-ink);
+  font-family: var(--font-body);
+}
+
+.editing {
+  padding: 12px;
+  border: 1px solid var(--color-rule);
+  border-radius: var(--radius-panel);
+  background: var(--color-panel);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .editing {
+    animation: visitsFade 160ms ease-out;
+  }
+}
+
+@keyframes visitsFade {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.status {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+}
+
+.legend {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-ink-2);
+}
+
+.optional {
+  font-weight: 400;
+  color: var(--color-muted);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* 요일 7개. 390(좌우 16px 거터)에서 한 줄(44x7 + 2x6 = 320px), 더 좁으면 줄을 바꾼다 */
+.chipsDays {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+
+.chipsDays .chip {
+  flex: 1 0 44px;
+  max-width: 72px;
+  padding: 0;
+}
+
+.summary {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  font-size: 0.875rem;
+}
+
+.summary > div {
+  display: flex;
+  gap: 8px;
+}
+
+.summary dt {
+  flex: none;
+  width: 6.5em;
+  color: var(--color-muted);
+}
+
+.summary dd {
+  margin: 0;
+  color: var(--color-ink);
+}
+
+/* StoreSignal: 목록 행 오른쪽 한 줄, 폭 제한 */
+.signal,
+.signalSlot {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  max-width: 8.5rem;
+  min-width: 0;
+  font-family: var(--font-body);
+  font-size: 0.75rem;
+  line-height: 1.3;
+  color: var(--color-ink-2);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.signalText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dot {
+  display: inline-block;
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-data);
+}
+
+/* StoreSignalDetail */
+.detail {
+  display: grid;
+  gap: 12px;
+  font-family: var(--font-body);
+  color: var(--color-ink);
+}
+
+.detail section {
+  display: grid;
+  gap: 4px;
+}
+
+.detailTitle {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.detailLine {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.detailList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  font-variant-numeric: tabular-nums;
+}
+
+/* NextPlan */
+.planCollapsed {
+  margin: 0;
+  padding: 10px 16px;
+  border: 1px solid var(--color-rule);
+  border-radius: var(--radius-panel);
+  background: var(--color-panel);
+  font-family: var(--font-body);
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  color: var(--color-muted);
+}
+
+.plan,
+.records {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid var(--color-rule);
+  border-radius: var(--radius-panel);
+  background: var(--color-panel);
+  font-family: var(--font-body);
+  color: var(--color-ink);
+}
+
+.planTitle {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 700;
+}
+
+.planSub {
+  margin: -8px 0 0;
+  font-size: 0.8125rem;
+  color: var(--color-muted);
+}
+
+.group {
+  display: grid;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-rule);
+}
+
+.groupTitle {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 700;
+}
+
+.items {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.item {
+  display: grid;
+  gap: 8px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--color-rule);
+}
+
+.item:last-child {
+  border-bottom: 0;
+}
+
+.itemHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 8px;
+  min-width: 0;
+}
+
+.itemName {
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.itemMeta {
+  font-size: 0.8125rem;
+  color: var(--color-muted);
+}
+
+.reason {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--color-ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.reason .dot {
+  transform: translateY(-1px);
+}
+
+.peak {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--color-ink-2);
+}
+
+/* NextPlan 미리보기(390에서 200px 이하) */
+.preview {
+  display: grid;
+  gap: 6px;
+  padding: 12px 16px;
+  border: 1px solid var(--color-rule);
+  border-radius: var(--radius-panel);
+  background: var(--color-panel);
+  font-family: var(--font-body);
+  color: var(--color-ink);
+}
+
+.previewHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.previewTitles {
+  display: grid;
+  min-width: 0;
+}
+
+.previewGroup {
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--color-ink-2);
+}
+
+.previewItem {
+  display: grid;
+  gap: 2px;
+}
+
+.previewItem .actions {
+  margin-top: 2px;
+}
+
+.previewName {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  line-height: 1.4;
+}
+
+/* 미리보기 상호는 한 줄, 넘치면 말줄임 */
+.previewName .nameBtn {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.previewName .itemMeta {
+  flex: none;
+}
+
+/* MyRecords */
+.empty {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--color-ink-2);
+}
+
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tag,
+.tagStrong {
+  padding: 2px 8px;
+  border: 1px solid var(--color-rule);
+  border-radius: var(--radius-pill);
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--color-ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.tagStrong {
+  border-color: var(--color-ink-2);
+  color: var(--color-ink);
+  font-weight: 600;
+}
+
+.confirm {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--color-ink-2);
+  border-radius: var(--radius-panel);
+}

@@ -1,5 +1,6 @@
 import { displayName } from "@/lib/format";
-import { customerLabel, peakLabel, topPercent } from "@/lib/labels";
+import { customerLabel, peakLabel } from "@/lib/labels";
+import { percentLabel } from "@/lib/store-view";
 import type { Row } from "@/lib/report";
 import { ATTRIBUTION } from "@/lib/site";
 import { MerLink } from "./MerLink";
@@ -36,7 +37,7 @@ export function RankTable({ rows, caption }: { rows: Row[]; caption: string }) {
                 </th>
                 <td data-label="업종">{r.item.merTpbuzNm}</td>
                 <td className="rank__pct num">
-                  {r.sigungu} 상위 {topPercent(r.item.ccgSaleRnk)}%
+                  {r.sigungu} 상위 {percentLabel(r.item.ccgSaleRnk)}
                 </td>
                 <td>{(() => {
                   const p = peakLabel(r.item.congestionDwk, r.item.congestionTizn);

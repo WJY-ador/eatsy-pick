@@ -54,9 +54,3 @@ export function normalizePlace(input: string): string {
   return input.replace(/\s+/g, "").replace(/역$/, "");
 }
 
-/** 자유 입력이 프리셋 별칭과 맞으면 그 프리셋 */
-export function matchArea(input: string): AreaPreset | undefined {
-  const key = normalizePlace(input);
-  if (!key) return undefined;
-  return AREAS.find((a) => a.aliases.includes(key) || normalizePlace(a.name) === key);
-}

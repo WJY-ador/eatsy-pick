@@ -45,7 +45,7 @@ async function GroupBody({ params }: { params: PageProps<"/area/[slug]/[group]">
   return (
     <>
       <nav className="crumbs" aria-label="위치">
-        <Link href="/area">상권별 결제 랭킹</Link>
+        <Link prefetch={false} href="/area">상권별 결제 랭킹</Link>
         <span aria-hidden="true"> / </span>
         <a href={`/area/${area.slug}`}>{area.name}</a>
       </nav>
@@ -56,9 +56,9 @@ async function GroupBody({ params }: { params: PageProps<"/area/[slug]/[group]">
         {area.centerName} {radiusLabel(r.radius)} {group.categories.join(", ")} 가게를 시군구 매출 순위가 높은 순서로 보여 줍니다. 프랜차이즈는 뒤로 내렸습니다.
       </p>
       <p className="report__cta">
-        <a className="btn btn--primary" href={`/?area=${area.slug}&occ=hoesik`}>
-          이 상권에서 모임 자리 3곳 고르기
-        </a>
+        <Link className="btn btn--primary" prefetch={false} href={`/?${new URLSearchParams({ area: area.slug }).toString()}`}>
+          이 상권 지도에서 고르기
+        </Link>
       </p>
 
       {r.summary ? (

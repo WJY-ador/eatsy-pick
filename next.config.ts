@@ -10,6 +10,7 @@ const nextConfig: NextConfig = {
   // /og가 fs로 읽는 한글 폰트를 서버 번들에 싣는다.
   outputFileTracingIncludes: {
     "/og": ["./assets/fonts/**/*"],
+    "/og/analysis": ["./assets/fonts/**/*"],
   },
   // 대회 유입 집계 규칙 2: 모든 경로에 Referrer-Policy를 건다.
   async headers() {
