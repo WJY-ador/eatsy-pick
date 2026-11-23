@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ATTRIBUTION, DATA_SOURCE, DISCLAIMER, SITE_NAME } from "@/lib/site";
+import { RecordsButton } from "./Records";
 
 export function SiteHeader() {
   return (
@@ -8,12 +9,7 @@ export function SiteHeader() {
         {SITE_NAME}
       </Link>
       <nav className="top__nav" aria-label="주요 화면">
-        <Link className="top__link" prefetch={false} href="/">
-          근처 후보
-        </Link>
-        <Link className="top__link" prefetch={false} href="/analysis">
-          상권 분석
-        </Link>
+        <RecordsButton />
       </nav>
     </header>
   );
@@ -26,9 +22,12 @@ export function SiteFooter() {
         <p className="foot__attr">{ATTRIBUTION}</p>
         <p className="foot__disc">{DISCLAIMER}</p>
         <p className="foot__src">{DATA_SOURCE}</p>
-        <p>
+        <p className="foot__links">
           <Link className="foot__link" prefetch={false} href="/area">
             상권별 결제 랭킹
+          </Link>
+          <Link className="foot__link" prefetch={false} href="/privacy">
+            개인정보 안내
           </Link>
         </p>
       </div>

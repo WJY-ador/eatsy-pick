@@ -4,6 +4,7 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { MerLink } from "@/components/MerLink";
 import { OCCASIONS, type Occasion, PEAK_DAYS, PEAK_MATCH_TEXT, PEAK_TIMES, planNext } from "@/lib/plan";
 import type { Store } from "@/lib/stores";
+import { displayName } from "@/lib/store-view";
 import { sortRecords, useVisits } from "@/lib/visits";
 import s from "./visits.module.css";
 
@@ -45,15 +46,16 @@ function Chips<T extends string>({
 
 /** 상호. onOpen이 있으면 상호 자체가 영수증을 여는 버튼이다(44px, 밑줄). */
 export function StoreName({ store, onOpen }: { store: Store; onOpen?: (store: Store) => void }) {
-  if (!onOpen) return <span className={s.itemName}>{store.name}</span>;
+  const name = displayName(store.name);
+  if (!onOpen) return <span className={s.itemName}>{name}</span>;
   return (
     <button
       type="button"
       className={s.nameBtn}
-      aria-label={`${store.name} 영수증 열기`}
+      aria-label={`${name} 영수증 열기`}
       onClick={() => onOpen(store)}
     >
-      {store.name}
+      {name}
     </button>
   );
 }

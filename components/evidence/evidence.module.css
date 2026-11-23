@@ -1,0 +1,201 @@
+/* 근거 차트 본문. 색과 서체는 계약 토큰만 쓴다. 하단 시트에 들어가게 짧게 둔다. */
+
+.fig {
+  margin: 0;
+  color: var(--color-ink);
+  font-family: var(--font-body);
+  font-variant-numeric: tabular-nums;
+}
+
+.lead {
+  margin: 0;
+  color: var(--color-ink-2);
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+.lead strong {
+  color: var(--color-ink);
+  font-weight: 700;
+}
+
+.facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.facts li {
+  padding: 4px 10px;
+  border: 1px solid var(--color-rule);
+  border-radius: var(--radius-pill);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.bars {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.bar {
+  display: grid;
+  grid-template-columns: 7.5rem minmax(0, 1fr) 3.25rem;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  font-size: 0.875rem;
+}
+
+.barLabel {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.mineTag {
+  padding: 1px 6px;
+  border: 1.5px solid var(--color-ink);
+  border-radius: var(--radius-pill);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.bar[data-mine="true"] .barLabel,
+.bar[data-mine="true"] .value {
+  font-weight: 800;
+}
+
+.track {
+  display: block;
+  height: 14px;
+}
+
+.fill {
+  display: block;
+  height: 100%;
+  border-radius: 0 4px 4px 0;
+  background: var(--color-data-2);
+}
+
+.bar[data-mine="true"] .fill {
+  background: var(--color-data);
+}
+
+.value {
+  text-align: right;
+  font-weight: 600;
+}
+
+.notes {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--color-rule);
+  color: var(--color-muted);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+.notes p {
+  margin: 0;
+}
+
+.notes p + p {
+  margin-top: 2px;
+}
+
+/* 매출 백분위 축: 0 왼쪽(상위), 100 오른쪽 */
+.axis {
+  position: relative;
+  height: 68px;
+  margin: 10px 8px 0;
+}
+
+.axisLine {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 36px;
+  height: 2px;
+  background: var(--color-rule);
+}
+
+.axisMid {
+  position: absolute;
+  left: 50%;
+  top: 31px;
+  width: 1px;
+  height: 12px;
+  background: var(--color-rule);
+}
+
+.dotWrap {
+  position: absolute;
+  top: 0;
+  width: 0;
+}
+
+.dot {
+  position: absolute;
+  top: 29px;
+  left: -8px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--color-data);
+  box-shadow: 0 0 0 2px var(--color-panel), 0 0 0 4px var(--color-ink);
+}
+
+.dotLabel {
+  position: absolute;
+  top: 2px;
+  white-space: nowrap;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  transform: translateX(-50%);
+}
+
+.dotLabel[data-edge="start"] {
+  transform: translateX(-8px);
+}
+
+.dotLabel[data-edge="end"] {
+  transform: translateX(calc(-100% + 8px));
+}
+
+.ticks {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 48px;
+  height: 16px;
+  color: var(--color-muted);
+  font-size: 0.75rem;
+}
+
+.ticks span {
+  position: absolute;
+  top: 0;
+}
+
+.ticks span:nth-child(1) {
+  left: 0;
+}
+
+.ticks span:nth-child(2) {
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.ticks span:nth-child(3) {
+  right: 0;
+}

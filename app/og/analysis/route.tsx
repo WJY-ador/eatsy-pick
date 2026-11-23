@@ -84,7 +84,7 @@ function Metric({ label, value, sub }: { label: string; value: string; sub: stri
   );
 }
 
-function AnalysisCard({ title, returned, a }: { title: string; returned: number; a: Analysis }) {
+function AnalysisCard({ title, scopeLabel, a }: { title: string; scopeLabel: string; a: Analysis }) {
   const f = a.filters;
   const parts: string[] = [];
   if (f.cat) parts.push(f.cat);
@@ -103,11 +103,12 @@ function AnalysisCard({ title, returned, a }: { title: string; returned: number;
         <div style={{ display: "flex", color: C.muted, fontSize: 26, fontWeight: 700 }}>상권 분석</div>
         <div style={{ display: "flex", marginTop: 6, color: C.ink, fontSize: 64, fontWeight: 700, letterSpacing: -1.5 }}>{title}</div>
         <div style={{ display: "flex", marginTop: 10, color: C.ink2, fontSize: 28 }}>{parts.join(", ")}</div>
-        <div style={{ display: "flex", alignItems: "baseline", marginTop: 34 }}>
-          <span style={{ color: C.ink, fontSize: 72, fontWeight: 700 }}>{a.filtered.length}곳</span>
-          <span style={{ marginLeft: 16, color: C.muted, fontSize: 28 }}>필터 적용 후 / API 반환 {returned}곳</span>
+        <div style={{ display: "flex", alignItems: "baseline", marginTop: 28 }}>
+          <span style={{ color: C.muted, fontSize: 28 }}>분석 매장</span>
+          <span style={{ marginLeft: 16, color: C.ink, fontSize: 72, fontWeight: 700 }}>{a.filtered.length}곳</span>
         </div>
-        <div style={{ display: "flex", marginTop: 34 }}>
+        <div style={{ display: "flex", marginTop: 2, color: C.muted, fontSize: 26 }}>조회 지역 {scopeLabel}</div>
+        <div style={{ display: "flex", marginTop: 26 }}>
           <Metric label="동네맛집 표시 비중" value={local.value} sub={local.sub} />
           <Metric label="회식 적합 표시 비중" value={hoesik.value} sub={hoesik.sub} />
           <Metric
@@ -140,7 +141,7 @@ export async function GET(request: NextRequest) {
     const dataset = await loadArea(loadInput(scope));
     if (dataset.stores.length > 0) {
       const a = analyze(dataset.stores, parseFilters(raw));
-      return await render(<AnalysisCard title={dataset.title || scopeName(scope)} returned={dataset.returned} a={a} />);
+      return await render(<AnalysisCard title={dataset.title || scopeName(scope)} scopeLabel={dataset.scopeLabel} a={a} />);
     }
   } catch {
     // 아래 일반 카드로 간다.

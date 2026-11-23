@@ -4,16 +4,27 @@ import { DAYS, type Bar, type PeakGrid, heatStep } from "@/lib/analytics";
 import s from "./analysis.module.css";
 
 /**
- * 요일 × 시간대 하이라이트 표. 셀 하나가 버튼이고, 숫자는 그 조합이 대표 피크인 매장 수다.
- * 색(--color-data-1~5)과 숫자를 같이 쓴다. 선택은 aria-pressed + 두꺼운 테두리 + 밑줄.
+ * 요일 × 시간대 하이라이트 표. 숫자는 그 조합이 대표 피크인 매장 수다.
+ * 색(--color-data-1~5)과 숫자를 같이 쓴다. 선택(강조)은 두꺼운 테두리 + 굵기 + 밑줄로 한 번 더 구분한다.
+ * onPick이 있으면 셀이 버튼(상권 분석 필터), 없으면 읽기 전용 셀(근거 차트)이다.
  */
-export function PeakTable({ grid, selected, onPick }: { grid: PeakGrid; selected: string | null; onPick: (key: string) => void }) {
+export function PeakTable({
+  grid,
+  selected,
+  onPick,
+  caption,
+}: {
+  grid: PeakGrid;
+  selected: string | null;
+  onPick?: (key: string) => void;
+  caption?: string;
+}) {
   if (grid.times.length === 0) return <p className={s.empty}>대표 피크 정보가 있는 매장이 없습니다.</p>;
   return (
     <>
-      <table className={s.heat}>
+      <table className={`${s.heat} ${onPick ? "" : s.heatStatic}`}>
         <caption className={s.srOnly}>
-          요일과 시간대별 대표 피크 매장 수. 셀을 누르면 그 조합으로 거릅니다.
+          {caption ?? "요일과 시간대별 대표 피크 매장 수. 셀을 누르면 그 조합으로 거릅니다."}
         </caption>
         <thead>
           <tr>
@@ -37,6 +48,22 @@ export function PeakTable({ grid, selected, onPick }: { grid: PeakGrid; selected
                 const key = `${d}-${t}`;
                 const n = grid.cells[key] ?? 0;
                 const pressed = selected === key;
+                if (!onPick) {
+                  return (
+                    <td key={key}>
+                      <span
+                        className={s.cellStatic}
+                        data-step={heatStep(n, grid.max)}
+                        data-peak={key}
+                        data-count={n}
+                        data-mine={pressed}
+                        aria-label={`${d}요일 ${t}, 대표 피크 ${n}곳${pressed ? ", 이 매장" : ""}`}
+                      >
+                        {n > 0 ? n : ""}
+                      </span>
+                    </td>
+                  );
+                }
                 return (
                   <td key={key}>
                     <button
@@ -69,7 +96,7 @@ export function PeakTable({ grid, selected, onPick }: { grid: PeakGrid; selected
           <span className={s.swatch} />
         </span>
         <span>많음, 최대 {grid.max}곳</span>
-        {grid.missing > 0 ? <span>, 피크 정보 없음 {grid.missing}곳 제외</span> : null}
+        {onPick && grid.missing > 0 ? <span>, 피크 정보 없음 {grid.missing}곳 제외</span> : null}
       </div>
     </>
   );

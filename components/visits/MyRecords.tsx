@@ -3,6 +3,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { MerLink } from "@/components/MerLink";
 import type { Store } from "@/lib/stores";
+import { displayName } from "@/lib/store-view";
 import { NOT_PERSISTENT_TEXT, clearAll, remove, sortRecords, useVisits } from "@/lib/visits";
 import { REACTION_LABEL, dayLabel } from "./format";
 import { StoreName } from "./NextPlan";
@@ -69,7 +70,7 @@ export function MyRecords({ onOpen }: { onOpen?: (store: Store) => void }) {
                     <button
                       type="button"
                       className={s.btnQuiet}
-                      aria-label={`${r.store.name} 기록 전체 삭제`}
+                      aria-label={`${displayName(r.store.name)} 기록 전체 삭제`}
                       onClick={() => {
                         focusHead.current = true;
                         remove(r.store.id);

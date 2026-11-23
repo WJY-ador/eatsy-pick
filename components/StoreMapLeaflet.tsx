@@ -3,13 +3,12 @@
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 import { useEffect, useRef } from "react";
+import { GEOCODE_CREDIT, NOMINATIM_ON } from "@/lib/geocode";
+import { TILE_ATTRIBUTION, TILE_GRAYSCALE, TILE_MAX_ZOOM, TILE_URL } from "@/lib/map-tiles";
 import { displayName } from "@/lib/store-view";
 import type { StoreMapProps } from "./StoreMap";
 
-// OSM 표준 타일(tile.openstreetmap.org). 정책: https://operations.osmfoundation.org/policies/tiles/
-// 밝은 회색은 CSS 필터(.storemap__tiles)로 만든다. 출처 표기는 지도 오른쪽 아래에 늘 보인다.
-const TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
-const TILE_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors';
+// 타일 주소, 출처, 회색 처리 여부는 lib/map-tiles.ts 한 곳에서 정한다.
 const FIT_PADDING: L.PointTuple = [28, 28];
 const FIT_MAX_ZOOM = 17;
 
@@ -54,7 +53,9 @@ export default function StoreMapLeaflet({ stores, selectedId, onSelect, me }: Om
     if (!box) return;
     const map = L.map(box, { zoomControl: false, attributionControl: true, scrollWheelZoom: true, tapTolerance: 20, center: [37.5665, 126.978], zoom: 12 });
     map.attributionControl.setPrefix(false);
-    L.tileLayer(TILE_URL, { maxZoom: 19, attribution: TILE_ATTRIBUTION, className: "storemap__tiles" }).addTo(map);
+    // 지도 영역 안의 출처: 타일(OpenStreetMap)과 주소 변환(Nominatim)
+    if (NOMINATIM_ON) map.attributionControl.addAttribution(GEOCODE_CREDIT);
+    L.tileLayer(TILE_URL, { maxZoom: TILE_MAX_ZOOM, attribution: TILE_ATTRIBUTION, className: TILE_GRAYSCALE ? "storemap__tiles" : "" }).addTo(map);
     L.control.zoom({ position: "topright", zoomInTitle: "확대", zoomOutTitle: "축소" }).addTo(map);
     mapRef.current = map;
     // 목록/지도 전환처럼 크기가 바뀌면 타일을 다시 맞춘다.

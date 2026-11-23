@@ -1,8 +1,9 @@
 // 홈 URL 계약. 서버 page와 클라이언트가 같이 쓴다. Next 전용 API와 proj4를 import하지 않는다.
-//   area=<slug> | loc=<동네>(+ near=1) | q=<매장 검색>&id=<Store.id> | fr=0 | sort=rank
+//   area=<slug> | loc=<동네>(+ near=1) | q=<음식, 매장 검색>&id=<Store.id> | fr=0 | d=<거리 구간 0~3>
 //   옛 링크의 occ, n은 읽지 않는다.
 
 import { AREAS, areaBySlug, normalizePlace } from "./areas";
+import { foodCategory } from "./food";
 
 export const DEFAULT_SLUG = "gangnam";
 const LOC_MAX = 30;
@@ -16,10 +17,14 @@ export type HomeQuery = {
   isDefault: boolean;
   near: boolean;
   q: string | null;
+  /** 음식 검색어가 대응표에 있으면 그 업종(이때 q는 null, foodTerm에 원래 말) */
+  food: string | null;
+  foodTerm: string | null;
   id: string | null;
   /** 프랜차이즈 제외(기본 true, fr=0이면 false) */
   excludeFranchise: boolean;
-  sort: "dist" | "rank";
+  /** 거리 구간(0: 300m 이내, 1: 300~600m, 2: 600m~1km, 3: 1km 이상). 없으면 null */
+  band: number | null;
 };
 
 type Raw = Record<string, string | string[] | undefined>;
@@ -67,6 +72,8 @@ export function parseHome(raw: Raw): HomeQuery {
   const id = clean(first(raw.id), 80);
   // 검색어가 지명이면 상권 전환으로 읽는다(스크립트 없이 폼을 보내도 같은 결과).
   // id가 있으면 q는 매장 이름이다(상권 분석에서 온 영수증 링크).
+  let food: string | null = null;
+  let foodTerm: string | null = null;
   if (q && !id) {
     const preset = presetFor(q);
     if (preset) {
@@ -76,17 +83,23 @@ export function parseHome(raw: Raw): HomeQuery {
       // 행정동 꼴(역삼1동)은 API 주소의 법정동 꼴(역삼동)로 맞춘다.
       scope = { kind: "loc", loc: q.replace(/^(.+?)\d+동$/, "$1동") };
       q = null;
+    } else if (foodCategory(q)) {
+      food = foodCategory(q);
+      foodTerm = q;
+      q = null;
     }
   }
-  const isDefault = scope === null;
+  const isDefault = scope === null && !food;
   return {
     scope: scope ?? areaScope(DEFAULT_SLUG),
     isDefault,
     near: first(raw.near) === "1" && !isDefault,
     q,
+    food,
+    foodTerm,
     id,
     excludeFranchise: first(raw.fr) !== "0",
-    sort: first(raw.sort) === "rank" ? "rank" : "dist",
+    band: /^[0-3]$/.test(first(raw.d) ?? "") ? Number(first(raw.d)) : null,
   };
 }
 
@@ -101,14 +114,14 @@ export function scopeEntries(scope: HomeScope): [string, string][] {
 /** 홈 경로. 좌표는 어떤 경우에도 넣지 않는다 */
 export function homeHref(
   scope: HomeScope,
-  o: { near?: boolean; q?: string | null; id?: string | null; excludeFranchise?: boolean; sort?: "dist" | "rank" } = {},
+  o: { near?: boolean; q?: string | null; id?: string | null; excludeFranchise?: boolean; band?: number | null } = {},
 ): string {
   const e: [string, string][] = scopeEntries(scope);
   if (o.near) e.push(["near", "1"]);
   if (o.q) e.push(["q", o.q]);
   if (o.id) e.push(["id", o.id]);
   if (o.excludeFranchise === false) e.push(["fr", "0"]);
-  if (o.sort === "rank") e.push(["sort", "rank"]);
+  if (o.band !== undefined && o.band !== null) e.push(["d", String(o.band)]);
   return `/?${new URLSearchParams(e).toString()}`;
 }
 

@@ -4,12 +4,12 @@
 export const SITE_NAME = "eatsy pick";
 export const SITE_DESCRIPTION =
   "내 주변 가게를 BC카드 결제 데이터로 고르고, 다녀온 곳의 반응을 다음 약속에 다시 씁니다. 로그인 없이 바로 씁니다.";
+/** 첫 화면 한 줄 설명(사용자 원문 그대로, 가운뎃점 유지) */
+export const TAGLINE = "별점·광고 말고, BC카드 실제 결제 데이터로 검증하는 동네 맛집";
+/** 내 주변 보기 버튼 툴팁 */
+export const GEO_TIP = "위치는 동네 이름을 찾는 데만 씁니다. 자세한 내용은 개인정보 안내";
 /** 공유 카드 일반 문구 */
 export const SITE_TAGLINE = "내 주변에서 고르고, 다음 약속에 다시 쓰는 결제 데이터 지도";
-/** 내 주변 위치 안내 */
-export const GEO_NOTICE = "위치는 동네 이름을 찾는 데만 씁니다. 약 100m 단위로 줄인 좌표가 OpenStreetMap으로 전송됩니다.";
-/** 내 주변 위치 안내(Nominatim을 끈 배포) */
-export const GEO_NOTICE_LOCAL = "위치는 가까운 상권을 고르는 데만 쓰고 기기 밖으로 보내지 않습니다.";
 
 /** 잇플 링크 문구 (규칙 1, 사용자가 2026-11-23 새로 준 원문) */
 export const MER_LINK_TEXT = "실시간 붐빔 · 메뉴 확인하기 ↗";

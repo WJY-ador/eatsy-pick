@@ -7,8 +7,12 @@ import { ATTRIBUTION, DISCLAIMER } from "@/lib/site";
 import { customersOf, displayName, hoursOf, peakOf, percentLabel } from "@/lib/store-view";
 import type { Store } from "@/lib/stores";
 
-function flag(v: boolean | null): string {
-  return v === true ? "있음" : v === false ? "없음" : "정보 없음";
+function localText(v: boolean | null): string {
+  return v === true ? "현지인이 많이 찾는 곳" : v === false ? "표시 없음" : "정보 없음";
+}
+
+function hoesikText(v: boolean | null): string {
+  return v === true ? "회식하기 좋은 곳으로 표시" : v === false ? "표시 없음" : "정보 없음";
 }
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
@@ -24,7 +28,20 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
  * 결제 영수증 상세. 매장명이나 지도 핀을 누르면 열린다.
  * 모바일은 아래에서 올라오는 시트, 데스크톱은 오른쪽 패널. 열리면 제목으로 포커스, Esc와 닫기로 닫는다.
  */
-export function Receipt({ store, distance, distanceBasis, onClose }: { store: Store; distance: string | null; distanceBasis: string | null; onClose: () => void }) {
+export function Receipt({
+  store,
+  distance,
+  distanceBasis,
+  onClose,
+  onPeak,
+}: {
+  store: Store;
+  distance: string | null;
+  distanceBasis: string | null;
+  onClose: () => void;
+  /** 대표 피크 차트를 연다(없으면 글자로만) */
+  onPeak?: () => void;
+}) {
   const titleId = useId();
   const headRef = useRef<HTMLHeadingElement>(null);
   const customers = customersOf(store);
@@ -88,14 +105,25 @@ export function Receipt({ store, distance, distanceBasis, onClose }: { store: St
                 "정보 없음"
               )}
             </Row>
-            <Row label="대표 피크">{peak ?? "정보 없음"}</Row>
+            <Row label="대표 피크">
+              {peak && onPeak ? (
+                <button type="button" className="taghit rc__peak" onClick={onPeak} aria-haspopup="dialog">
+                  <span className="tag tag--btn">
+                    {peak}
+                    <span className="tag__chev" aria-hidden="true" />
+                  </span>
+                </button>
+              ) : (
+                (peak ?? "정보 없음")
+              )}
+            </Row>
             <Row label="예상 영업시간">
               {hours ? <span className="num">{hours}</span> : "정보 없음"}
               <span className="rc__note">최근 1개월 결제 승인 시각 기준 추정</span>
             </Row>
             {store.holidays.length ? <Row label="휴무 요일">{store.holidays.join(", ")}</Row> : null}
-            <Row label="회식 적합 표시">{flag(store.hoesik)}</Row>
-            <Row label="동네맛집 표시">{flag(store.local)}</Row>
+            <Row label="동네맛집">{localText(store.local)}</Row>
+            <Row label="회식 적합">{hoesikText(store.hoesik)}</Row>
           </dl>
           <hr className="rc__dash" />
           <div className="rc__mine">

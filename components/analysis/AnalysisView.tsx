@@ -16,6 +16,7 @@ import {
   toggleFilter,
 } from "@/lib/analytics";
 import { customerLabel } from "@/lib/labels";
+import { displayName } from "@/lib/store-view";
 import type { AreaDataset, Store } from "@/lib/stores";
 import { BarChart, PeakTable } from "./Charts";
 import { type Scope, analysisPath, receiptHref } from "./scope";
@@ -88,39 +89,27 @@ export function AnalysisView({
   if (applied.cust) chips.push({ key: "cust", text: `고객층 ${customerLabel(applied.cust)}` });
 
   return (
-    <div className={s.inner}>
+    <div className={s.stack}>
       <section className={s.panel} aria-labelledby="analysis-title">
         <h1 id="analysis-title" className={s.h1}>
           {dataset.title} 상권 분석
         </h1>
         <dl className={s.facts}>
           <div className={s.fact}>
-            <dt>실제 조회 범위</dt>
+            <dt>조회 지역</dt>
             <dd data-testid="scope">{dataset.scopeLabel}</dd>
           </div>
           <div className={s.fact}>
-            <dt>API 반환</dt>
-            <dd data-testid="returned">{dataset.returned}곳</dd>
-          </div>
-          <div className={s.fact}>
-            <dt>필터 적용 후</dt>
+            <dt>분석 매장</dt>
             <dd data-testid="filtered">{a.filtered.length}곳</dd>
           </div>
         </dl>
         {fellBack ? <p className={s.notice}>알 수 없는 상권이라 강남역을 보여 줍니다.</p> : null}
-        {dataset.hitLimit ? (
-          <p className={s.notice} data-testid="hit-limit">
-            호출당 100곳 반환 한도에 도달했습니다. 범위 안 전체 매장이 아닙니다.
-          </p>
-        ) : null}
         {dataset.failed > 0 ? (
           <p className={s.notice} data-testid="partial">
-            조회 {dataset.queries.length}건 중 {dataset.failed}건이 실패해 일부 결과만 보여 줍니다.
+            일부 지역을 불러오지 못해 결과 일부만 보여 줍니다.
           </p>
         ) : null}
-        <p className={s.caption}>
-          API 반환 수는 중복 정리 전 건수입니다. 분석은 정리 뒤 {dataset.stores.length}곳에서 계산합니다.
-        </p>
         {!empty ? (
           <>
             <div className={s.controls}>
@@ -163,7 +152,7 @@ export function AnalysisView({
         <section className={s.panel}>
           <h2 className={s.h2}>조회된 매장이 없습니다</h2>
           <p className={s.empty}>
-            {dataset.scopeLabel} 범위에서 API가 돌려준 매장이 없습니다. 조회는 성공했습니다. 다른 동네나 상권을 골라 주세요.
+            {dataset.scopeLabel}에서 조회된 매장이 없습니다. 다른 동네나 상권을 골라 주세요.
           </p>
         </section>
       ) : (
@@ -250,7 +239,7 @@ export function AnalysisView({
                 <h2 id="list-title" className={s.h2}>
                   매장 목록 <span className={s.num}>{a.filtered.length}곳</span>
                 </h2>
-                <p className={s.caption}>API 순서(시군구 매출 상위 순)입니다. 매장 이름을 누르면 결제 영수증으로 갑니다.</p>
+                <p className={s.caption}>시군구 매출 상위 순입니다. 매장 이름을 누르면 결제 영수증으로 갑니다.</p>
                 {a.filtered.length === 0 ? (
                   <div>
                     <p className={s.empty}>
@@ -267,7 +256,7 @@ export function AnalysisView({
                     {a.filtered.map((st) => (
                       <li key={st.id} className={s.row} data-store-id={st.id} data-selected={st.id === selected}>
                         <Link className={s.rowName} href={receiptHref(scope, st)} prefetch={false}>
-                          {st.name}
+                          {displayName(st.name)}
                         </Link>
                         <p className={s.rowMeta}>{storeMeta(st)}</p>
                         <MerLink merUrl={st.merUrl ?? undefined} className={s.cta} />
@@ -280,6 +269,7 @@ export function AnalysisView({
           </div>
         </>
       )}
+      <p className={s.footnote}>결제 데이터는 조회 지역에서 매출 상위 순으로 받은 매장 기준입니다.</p>
     </div>
   );
 }

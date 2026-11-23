@@ -6,7 +6,7 @@ import { OG_COLORS as C } from "@/lib/og-theme";
 import { ATTRIBUTION, SITE_NAME, SITE_TAGLINE } from "@/lib/site";
 import { type AreaDataset, cleanLoc, loadArea } from "@/lib/stores";
 
-// 홈 공유 카드 1200×630, 상권 꼴(상권명, 조회 범위, 표본 수). 좌표와 개인 기록은 넣지 않는다.
+// 홈 공유 카드 1200×630, 상권 꼴(상권명, 조회 지역, 매장 수). 좌표와 개인 기록은 넣지 않는다.
 // 어떤 경우에도 500을 내지 않는다: 조회 실패면 일반 카드, 폰트도 못 읽으면 204.
 export const maxDuration = 30;
 
@@ -76,10 +76,9 @@ function AreaCard({ d }: { d: AreaDataset }) {
     <Frame>
       <div style={{ display: "flex", color: C.muted, fontSize: 24 }}>결제 데이터로 고르는 근처 후보</div>
       <div style={{ display: "block", marginTop: 8, color: C.ink, fontSize: 60, fontWeight: 700, lineClamp: 1, overflow: "hidden" }}>{d.title}</div>
-      <div style={{ display: "flex", marginTop: 6, color: C.ink2, fontSize: 24 }}>조회 범위: {d.scopeLabel}</div>
+      <div style={{ display: "flex", marginTop: 6, color: C.ink2, fontSize: 24 }}>{d.scopeLabel}에서 조회</div>
       <Dash />
-      {row("API 반환", `${d.returned}곳`)}
-      {row("중복 정리 뒤 매장", `${d.stores.length}곳`)}
+      {row("조회된 매장", `${d.stores.length}곳`)}
       {row("프랜차이즈 제외", `${independent}곳`)}
       {row("그중 회식 적합 표시", `${hoesik}곳`)}
     </Frame>

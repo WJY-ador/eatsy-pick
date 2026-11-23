@@ -1,7 +1,8 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import type { JSX } from "react";
+import { type JSX, useState } from "react";
+import { MAP_PROVIDER } from "@/lib/map-provider";
 import type { Store } from "@/lib/stores";
 
 export type StoreMapProps = {
@@ -19,6 +20,11 @@ const Inner = dynamic(() => import("./StoreMapLeaflet"), {
   ssr: false,
   loading: () => <div className="storemap__frame storemap__frame--loading" aria-hidden="true" />,
 });
+// 카카오 키가 있는 빌드에서만 쓴다. SDK 로드나 인증이 실패하면 Leaflet으로 넘어간다.
+const Kakao = dynamic(() => import("./StoreMapKakao"), {
+  ssr: false,
+  loading: () => <div className="storemap__frame storemap__frame--loading" aria-hidden="true" />,
+});
 
 /**
  * 매장 지도. 핀을 누르면 onSelect(id). 지도 이동과 확대는 API를 다시 부르지 않는다.
@@ -26,9 +32,15 @@ const Inner = dynamic(() => import("./StoreMapLeaflet"), {
  */
 export function StoreMap({ stores, selectedId, onSelect, me, height = DEFAULT_MAP_HEIGHT }: StoreMapProps): JSX.Element {
   const shown = stores.reduce((n, s) => (s.lat !== null && s.lng !== null ? n + 1 : n), 0);
+  const [kakaoFailed, setKakaoFailed] = useState(false);
+  const useKakao = MAP_PROVIDER === "kakao" && !kakaoFailed;
   return (
     <div className="storemap" style={{ "--storemap-h": `${height}px` } as React.CSSProperties}>
-      <Inner stores={stores} selectedId={selectedId} onSelect={onSelect} me={me} />
+      {useKakao ? (
+        <Kakao stores={stores} selectedId={selectedId} onSelect={onSelect} me={me} onFail={() => setKakaoFailed(true)} />
+      ) : (
+        <Inner stores={stores} selectedId={selectedId} onSelect={onSelect} me={me} />
+      )}
       <p className="storemap__count num">
         지도 표시 {shown}곳 / 전체 {stores.length}곳
       </p>

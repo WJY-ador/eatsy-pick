@@ -38,7 +38,18 @@ export function customersOf(s: Pick<Store, "customers">): string[] {
   return s.customers.map(customerLabel);
 }
 
-/** 표시 상호: 법인 표기만 뗀다 */
+const CORP = /\(주\)|㈜|주식회사|유한회사|\(유\)|\(사\)|사단법인|재단법인/g;
+
+/**
+ * 화면에 보이는 상호. 법인 표기를 떼고, 슬래시로 붙은 법인명 조각("…/주식회사 바나플에프엔", "(주)웨스트사이공/할리스커피")은 뺀다.
+ * 검색 조회에 쓰는 원문(q)과 merUrl에는 쓰지 않는다. 화면 표시 전용이다.
+ */
 export function displayName(name: string): string {
-  return name.replace(/\(주\)|㈜|주식회사|유한회사|\(유\)/g, "").replace(/\s+/g, " ").trim() || name;
+  const tidy = (v: string) => v.replace(CORP, "").replace(/\s+/g, " ").trim();
+  const parts = name.split("/");
+  if (parts.length > 1) {
+    const kept = parts.filter((p) => !new RegExp(CORP.source).test(p)).map(tidy).filter(Boolean);
+    if (kept.length > 0) return kept.join("/");
+  }
+  return tidy(name) || name;
 }

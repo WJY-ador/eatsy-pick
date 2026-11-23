@@ -1,9 +1,6 @@
-// 카드, 표, OG 이미지가 같이 쓰는 표시 형식.
+// 카드, 표, OG 이미지가 같이 쓰는 표시 형식. 상호 표시는 lib/store-view.ts displayName 하나로 모은다.
+export { displayName } from "./store-view";
 
-/** 법인 표기 "(주)", "주식회사", "유한회사"만 뗀다 */
-export function displayName(name: string): string {
-  return name.replace(/\(주\)|주식회사|유한회사/g, "").replace(/\s+/g, " ").trim() || name;
-}
 
 export function radiusLabel(r: number | null): string {
   if (r === null) return "반경 제한 없이";

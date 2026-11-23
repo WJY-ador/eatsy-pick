@@ -26,3 +26,7 @@
 .storemap .leaflet-control-attribution { font-size: var(--text-xs); color: var(--color-ink-2); background: color-mix(in oklab, var(--color-panel) 88%, transparent); padding: 0 var(--space-xs); }
 .storemap .leaflet-control-attribution a { display: inline-flex; align-items: center; min-height: 44px; color: var(--color-ink); }
 .storemap .leaflet-control-attribution a:focus-visible { outline: 2px solid var(--color-focus); outline-offset: -2px; }
+
+/* Kakao pins are CustomOverlay buttons: same ring and selected look, 44px hit area. No filter on Kakao tiles. */
+.smpin--kakao { width: 44px; height: 44px; padding: 0; border: 0; background: none; cursor: pointer; }
+.storemap__credit { position: absolute; left: var(--space-xs); bottom: 28px; z-index: 2; margin: 0; padding: 0 var(--space-2xs); border-radius: 4px; background: color-mix(in oklab, var(--color-panel) 85%, transparent); font-size: var(--text-xs); color: var(--color-ink-2); pointer-events: none; }

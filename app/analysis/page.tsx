@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { AnalysisView } from "@/components/analysis/AnalysisView";
-import { analysisPath, loadInput, ogPath, parseScope, scopeName } from "@/components/analysis/scope";
+import { AreaSwitch } from "@/components/analysis/AreaSwitch";
+import { type Scope, analysisPath, loadInput, ogPath, parseScope, scopeName } from "@/components/analysis/scope";
 import s from "@/components/analysis/analysis.module.css";
 import { parseFilters, splitPeak } from "@/lib/analytics";
 import { SITE_NAME, siteUrl } from "@/lib/site";
@@ -44,17 +45,29 @@ export async function generateMetadata({ searchParams }: PageProps<"/analysis">)
   };
 }
 
-async function AnalysisData({ searchParams }: { searchParams: PageProps<"/analysis">["searchParams"] }) {
-  const raw = await searchParams;
-  const { scope, fellBack } = parseScope(raw);
+/** 조회 결과. 상권이 바뀌면 바깥 Suspense key가 바뀌어 스켈레톤이 다시 뜨고, 필터는 새 주소 기준으로 초기화된다. */
+async function Loaded({ scope, fellBack, raw }: { scope: Scope; fellBack: boolean; raw: Record<string, string | string[] | undefined> }) {
   // 전부 실패하면 loadArea가 throw하고 error.tsx가 받는다. 빈 결과(0곳)는 화면이 따로 그린다.
   const dataset = await loadArea(loadInput(scope));
   return <AnalysisView dataset={dataset} scope={scope} initialFilters={parseFilters(raw)} fellBack={fellBack} />;
 }
 
+async function AnalysisData({ searchParams }: { searchParams: PageProps<"/analysis">["searchParams"] }) {
+  const raw = await searchParams;
+  const { scope, fellBack } = parseScope(raw);
+  return (
+    <div className={s.inner}>
+      <AreaSwitch scope={scope} />
+      <Suspense key={analysisPath(scope, null)} fallback={<Skeleton />}>
+        <Loaded scope={scope} fellBack={fellBack} raw={raw} />
+      </Suspense>
+    </div>
+  );
+}
+
 function Skeleton() {
   return (
-    <div className={s.inner} aria-busy="true">
+    <div className={s.stack} aria-busy="true" data-testid="loading">
       <p className={s.eyebrow}>결제 데이터를 불러오는 중입니다.</p>
       <div className={s.skeleton} />
       <div className={s.skeleton} />
@@ -65,7 +78,13 @@ function Skeleton() {
 export default function AnalysisPage({ searchParams }: PageProps<"/analysis">) {
   return (
     <main id="main" className={s.page}>
-      <Suspense fallback={<Skeleton />}>
+      <Suspense
+        fallback={
+          <div className={s.inner}>
+            <Skeleton />
+          </div>
+        }
+      >
         <AnalysisData searchParams={searchParams} />
       </Suspense>
     </main>
