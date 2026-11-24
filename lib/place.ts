@@ -29,15 +29,31 @@ export type PlaceResolved = {
 };
 
 /**
- * 카카오 주소 → 잇플 조회용 주소 범위. 시도와 지번(산 번지 포함)을 뗀다.
+ * 카카오 주소 → 전체 주소 범위(리 포함). 시도와 지번(산 번지 포함)을 뗀다.
  * "부산 해운대구 우동 656" → "해운대구 우동", "강원특별자치도 춘천시 근화동 1" → "춘천시 근화동".
+ * 역과 장소 기준점의 조회에는 아래 addressRange를 쓴다.
  * 시도를 떼는 까닭: 가맹점 주소의 시도 표기가 섞여 있어(강원, 전라남도) 넣으면 0건이 된다(2026-11-23 춘천역 실측 0 → 72).
  */
-export function addressRange(addressName: string): string | null {
+export function addressRangeFull(addressName: string): string | null {
   const tokens = addressName.trim().split(/\s+/).filter(Boolean).slice(1);
   const cut = tokens.findIndex((t) => t === "산" || /^(산)?\d/.test(t));
   const kept = cut === -1 ? tokens : tokens.slice(0, cut);
   return kept.length >= 1 ? kept.join(" ") : null;
+}
+
+/**
+ * 역과 장소 기준점의 잇플 조회 범위. addressRangeFull에서 읍이나 면 뒤의 리를 뗀다
+ * ("경북 포항시 북구 흥해읍 이인리 137-1" → "포항시 북구 흥해읍"). 동 주소는 addressRangeFull과 같다.
+ * 리를 떼는 까닭: 읍면 가맹점 주소는 대부분 도로명이라 리가 없다(2026-11-24 실측: 흥해읍 이인리 0건, 흥해읍 100건 중 리 표기 5건).
+ * 지역 키와 사용자가 고른 리 지역(지역 추가의 리 후보)은 addressRangeFull을 그대로 쓴다.
+ */
+export function addressRange(addressName: string): string | null {
+  const full = addressRangeFull(addressName);
+  if (!full) return null;
+  const tokens = full.split(" ");
+  const n = tokens.length;
+  if (n >= 2 && /리$/.test(tokens[n - 1]) && /[읍면]$/.test(tokens[n - 2])) return tokens.slice(0, -1).join(" ");
+  return full;
 }
 
 /** 지하철역 이름에서 노선 표기를 뗀다("해운대역 부산2호선" → "해운대역") */
@@ -200,7 +216,8 @@ function regionOf(d: KakaoAddressDoc): RegionPlace | null {
   const base = { kind: "region" as const, sido, address, ...at, q: address };
   if (dong) {
     // 시군구가 없는 시도(세종)의 동은 시도를 붙여 조회하고 시군구로 거르지 않는다(가맹점 주소 둘째 토큰이 도로명이다).
-    const range = gu ? addressRange(address) : `${sido} ${dong}`;
+    // 사용자가 고른 리 지역은 리 그대로 조회한다(제목과 범위 문구가 그 리다).
+    const range = gu ? addressRangeFull(address) : `${sido} ${dong}`;
     if (!range) return null;
     const key = gu ? `region:${sido} ${gu} ${dong}` : `region:${sido} ${dong}`;
     return { ...base, key, level: "dong", unit: unitOf("dong", dong), name: dong, range, sigungu: gu.split(/\s+/)[0] ?? "" };
@@ -224,7 +241,9 @@ function stationOf(d: KakaoDoc, query: string): RegionPlace | null {
   const at = coord(d);
   const address = (d.address_name ?? "").trim();
   const range = addressRange(address);
-  if (!at || !range) return null;
+  // 키는 리를 뗀 조회 범위가 아니라 전체 범위로 만든다(이미 저장된 키와 공유 주소의 k가 그대로 맞는다).
+  const keyRange = addressRangeFull(address);
+  if (!at || !range || !keyRange) return null;
   const isSubway = d.category_group_code === SUBWAY;
   // 분류 코드가 없는 기차역(전주역)은 이름이 검색어 마지막 낱말과 같을 때만 받는다.
   const last = query.trim().split(/\s+/).pop() ?? "";
@@ -232,7 +251,7 @@ function stationOf(d: KakaoDoc, query: string): RegionPlace | null {
   const name = placeName(d);
   const sido = shortSido(address.split(/\s+/)[0] ?? "");
   return {
-    key: `station:${sido} ${range} ${name}`,
+    key: `station:${sido} ${keyRange} ${name}`,
     kind: "station",
     level: "station",
     unit: "역",

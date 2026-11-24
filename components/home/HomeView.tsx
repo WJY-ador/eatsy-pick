@@ -2,7 +2,8 @@
 
 import "@/app/feed.css";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, useTransition } from "react";
+import { useMyAreas } from "@/components/area/my-areas-store";
 import { EvidenceChart } from "@/components/evidence";
 import { MerLink } from "@/components/MerLink";
 import { NavLink, setNavPending } from "@/components/NavLink";
@@ -27,11 +28,15 @@ import { RegionChips, ThemeChips } from "./Chips";
 import { CURATION_MAX, Curation } from "./Curation";
 import { MapSection, type MapSectionHandle } from "./MapSection";
 import { Receipt } from "./Receipt";
+import { homeRegions, RegionPanel } from "./RegionAdd";
 import { TasteSummary, useHydrated } from "./TasteSummary";
 
 /** 추천 섹션 제목과 부제(전체 테마에서 매출 상위 1% 다음) */
 const RECO_TITLE = "내 저장 패턴과 비슷한 곳";
 const RECO_SUB = "내가 저장한 곳과 업종이 같은 매장";
+
+/** 이름만 검색에서 지역 칩 활성 표시를 끄는 범위(어느 칩과도 같지 않다) */
+const NO_SCOPE: HomeScope = { kind: "loc", loc: "" };
 
 /** 상호 검색 결과를 한 번에 보여 주는 수 */
 const SEARCH_PAGE = 8;
@@ -103,6 +108,13 @@ function writeLastRegion(scope: HomeScope) {
 
 export function HomeView({ data }: { data: HomeData }) {
   const { query: h, dataset, search, presets, place } = data;
+  /** 범위 없는 가게 이름 검색: 지역 피드 없이 이름 검색 결과와 그 지도만 보인다(서버가 상권을 조회하지 않는다) */
+  const nameOnly = h.isDefault && !!h.q;
+  /**
+   * 지역 홈 + 그 낱말이 이름에 들어간 가게(맨 낱말이 지역으로 풀림, 상권 분석의 영수증 링크도 같은 꼴). 이름 검색은 지도 아래 보조 섹션이다.
+   * 영수증을 열어 주소에 id가 붙어도 같은 배치를 유지한다(새로고침해도 같은 화면).
+   */
+  const regionNamed = !h.isDefault && !!h.q;
   const router = useRouter();
   const sp = useSearchParams();
   const geo = useGeo();
@@ -122,9 +134,10 @@ export function HomeView({ data }: { data: HomeData }) {
     if (h.id) return h.id;
     // 상호 검색이 한 곳으로 좁혀지면(프랜차이즈 제외를 적용한 뒤) 영수증을 바로 연다.
     const shownSearch = search?.status === "ok" ? search.stores.filter((st) => !(h.excludeFranchise && st.franchise)) : [];
-    if (shownSearch.length === 1) return shownSearch[0].id;
+    // 지역 홈의 보조 섹션이면 열지 않는다(지역 홈을 보러 왔다).
+    if (shownSearch.length === 1 && !regionNamed) return shownSearch[0].id;
     return null;
-  }, [h.id, h.excludeFranchise, search]);
+  }, [h.id, h.excludeFranchise, search, regionNamed]);
   /** 영수증을 연 매장 */
   const [selectedId, setSelectedId] = useState<string | null>(initialSelected);
   const lastTrigger = useRef<HTMLElement | null>(null);
@@ -230,6 +243,11 @@ export function HomeView({ data }: { data: HomeData }) {
 
   // ----- 후보 집합 하나: 지역 조회 결과 → 프랜차이즈 제외. 브리핑, 큐레이션, 지도와 목록이 모두 여기서 나온다 -----
   const all = useMemo(() => dataset?.stores ?? [], [dataset]);
+  /** 이름만 검색의 지도 후보: 프랜차이즈 제외를 적용한 검색 결과 중 좌표가 있는 곳 */
+  const nameMapped = useMemo(
+    () => (nameOnly && search?.status === "ok" ? search.stores.filter((s) => !(exclude && s.franchise) && s.lat !== null && s.lng !== null) : []),
+    [nameOnly, search, exclude],
+  );
   const pool = useMemo(() => (exclude ? all.filter((s) => !s.franchise) : all), [all, exclude]);
   const themed = useMemo(() => (theme === "all" ? pool : pool.filter((s) => matchTheme(s, theme))), [pool, theme]);
   const brief = useMemo(() => briefingOf(pool), [pool]);
@@ -238,9 +256,11 @@ export function HomeView({ data }: { data: HomeData }) {
   const origin: Origin = useMemo(() => {
     if (nearShown && geo.me) return { point: geo.me, label: "내 위치" };
     if (dataset?.center) return { point: dataset.center, label: place ? place.name : `${dataset.title} 중심` };
+    // 이름만 검색은 지역이 없어 결과 중심 거리가 뜻이 없다(전국 지점). 이미 받은 내 위치가 있을 때만 그 거리를 쓴다.
+    if (nameOnly) return geo.me ? { point: geo.me, label: "내 위치" } : null;
     const c = centroid(all);
     return c ? { point: c, label: "조회 결과 중심" } : null;
-  }, [nearShown, geo.me, dataset, place, all]);
+  }, [nearShown, geo.me, dataset, place, all, nameOnly]);
   const focus: Point | null = nearShown && geo.me ? geo.me : (dataset?.center ?? null);
   const distanceOf = useCallback((s: Store) => (origin ? distanceM(origin.point, s) : null), [origin]);
 
@@ -269,7 +289,8 @@ export function HomeView({ data }: { data: HomeData }) {
     if (t && document.contains(t)) t.focus();
   }, []);
 
-  const where = dataset ? (nearShown ? `내 주변, ${dataset.title}` : dataset.title) : scopeName(scope);
+  // 이름만 검색은 지역이 없다(기본 상권 이름을 쓰지 않는다).
+  const where = nameOnly ? `${h.q} 검색` : dataset ? (nearShown ? `내 주변, ${dataset.title}` : dataset.title) : scopeName(scope);
   const region = dataset && h.food ? `${where} ${foodDisplayName(h.food)} 업종` : where;
   /** 큐레이션 제목의 지역 이름(음식 조건과 내 주변 표시는 빼고 조회 지역만) */
   const areaTitle = dataset?.title ?? scopeName(scope);
@@ -299,9 +320,21 @@ export function HomeView({ data }: { data: HomeData }) {
   };
   const pickSort = useCallback((s: HomeSort) => patchUrl({ s: s === "rank" ? "rank" : null }), []);
 
-  const regionHref = (slug: string) => {
-    const a = areaBySlug(slug);
-    return homeHref({ kind: "area", slug, name: a?.name ?? "" }, { q: h.food ? h.foodTerm : null, excludeFranchise: exclude, theme, sort });
+  const regionHref = (to: HomeScope) => homeHref(to, { q: h.food ? h.foodTerm : null, excludeFranchise: exclude, theme, sort });
+
+  // 지역 칩 목록(상권 랭킹 내 상권 목록과 같은 저장소)과 지역 추가, 편집 패널
+  const myAreas = useMyAreas();
+  const regions = useMemo(() => homeRegions(myAreas, scope), [myAreas, scope]);
+  const [regionPanel, setRegionPanel] = useState<"add" | "edit" | null>(null);
+  const regionPanelId = useId();
+  const closeRegionPanel = () => {
+    setRegionPanel(null);
+    document.querySelector<HTMLElement>('[data-testid="region-add"]')?.focus({ preventScroll: true });
+  };
+  const goRegion = (to: HomeScope) => {
+    userPicked.current = true;
+    setRegionPanel(null);
+    go(regionHref(to));
   };
   const onNear = () => {
     // 이미 내 주변이면 다시 묻지 않는다.
@@ -324,17 +357,17 @@ export function HomeView({ data }: { data: HomeData }) {
 
   // 지역 줄의 지도 보기: 지도 섹션이 그려질 때만 버튼을 둔다(조회 실패, 0건, 빈 테마에는 없다). 큐레이션 순서는 그대로다.
   const mapRef = useRef<MapSectionHandle>(null);
-  const mapShown = !!dataset && pool.length > 0 && themed.length > 0;
+  const mapShown = nameOnly ? nameMapped.length > 0 : !!dataset && pool.length > 0 && themed.length > 0;
   const onMap = useCallback(() => mapRef.current?.reveal(), []);
 
-  // 지도와 목록에 보이는 수가 분석 대상 수와 다르면 무슨 수인지 적는다(지도는 위치 정보가 있는 곳만 그린다).
+  // 지도와 목록에 보이는 수가 분석 대상 수와 다를 때만 숫자로 적는다(지도는 위치 정보가 있는 곳만 그린다). 예: 회식 적합 12곳, 지도 11곳
   const mapped = themed.filter((s) => s.lat !== null && s.lng !== null).length;
   const themeLabel = THEMES.find((t) => t.id === theme)?.label ?? "";
   const mapNote =
     theme !== "all"
-      ? `지도와 전체 매장에는 ${themeLabel} 조건에 맞는 ${themed.length}곳을 보여 줍니다${mapped < themed.length ? `. 그중 위치 정보가 있는 ${mapped}곳을 지도에 표시합니다` : ""}.`
+      ? `${themeLabel} ${themed.length}곳${mapped < themed.length ? `, 지도 ${mapped}곳` : ""}`
       : mapped < pool.length
-        ? `지도에는 위치 정보가 있는 ${mapped}곳을 표시합니다.`
+        ? `지도 ${mapped}곳`
         : null;
 
   // ----- 내 저장 패턴과 비슷한 곳 -----
@@ -388,7 +421,19 @@ export function HomeView({ data }: { data: HomeData }) {
     <div className="feed">
       <h1 className="visually-hidden">{region} 결제 데이터로 고르는 가게</h1>
       <div className="feed__filters">
-        <RegionChips activeSlug={scope.kind === "area" ? scope.slug : null} near={nearShown} locating={geo.locating} hrefFor={regionHref} onNear={onNear} onMap={mapShown ? onMap : undefined} />
+        <RegionChips
+          regions={regions}
+          current={nameOnly ? NO_SCOPE : scope}
+          near={nearShown}
+          locating={geo.locating}
+          hrefFor={regionHref}
+          onNear={onNear}
+          onMap={mapShown ? onMap : undefined}
+          panelId={regionPanelId}
+          panelOpen={regionPanel !== null}
+          onAdd={() => setRegionPanel((m) => (m ? null : "add"))}
+        />
+        {regionPanel ? <RegionPanel id={regionPanelId} mode={regionPanel} regions={regions} onMode={setRegionPanel} onClose={closeRegionPanel} onGo={goRegion} /> : null}
         <ThemeChips theme={theme} onTheme={pickTheme} exclude={exclude} onExclude={toggleExclude} />
       </div>
 
@@ -420,9 +465,29 @@ export function HomeView({ data }: { data: HomeData }) {
         결제 데이터를 불러오는 중입니다.
       </p>
 
-      {search ? <SearchResults search={search} region={region} exclude={exclude} distanceOf={distanceOf} onPick={openStore} onShowChains={toggleExclude} selectedId={selectedId} /> : null}
+      {search && !regionNamed ? (
+        <SearchResults search={search} feedNote={nameOnly ? null : region} exclude={exclude} distanceOf={distanceOf} onPick={openStore} onShowChains={toggleExclude} selectedId={selectedId} />
+      ) : null}
 
-      {!dataset ? (
+      {nameOnly ? (
+        nameMapped.length > 0 ? (
+          <MapSection
+            ref={mapRef}
+            stores={nameMapped}
+            origin={origin?.point ?? null}
+            originLabel={origin?.label ?? ""}
+            focus={null}
+            me={geo.me}
+            near={false}
+            locateState={locateState}
+            onLocate={onLocate}
+            selectedId={selectedId}
+            onOpen={openStore}
+            sort={sort}
+            onSort={pickSort}
+          />
+        ) : null
+      ) : !dataset ? (
         <div className="state state--error" role="alert">
           <h2 className="state__h">결제 데이터를 불러오지 못했습니다.</h2>
           <p>{scopeName(scope)} 조회가 실패했습니다. 잠시 뒤 다시 시도하거나 다른 지역을 골라 보세요.</p>
@@ -445,7 +510,7 @@ export function HomeView({ data }: { data: HomeData }) {
         <div className="state">
           <h2 className="state__h">프랜차이즈를 빼면 남는 곳이 없습니다.</h2>
           <p>
-            {region}에서 조회한 {all.length}곳이 모두 프랜차이즈로 판정됐습니다. 프랜차이즈 제외를 끄면 같은 조회 결과에서 다시 보입니다.
+            전체 {all.length}곳, 모두 프랜차이즈
           </p>
           <button type="button" className="btn btn--quiet" onClick={toggleExclude}>
             프랜차이즈 제외 끄기
@@ -463,7 +528,7 @@ export function HomeView({ data }: { data: HomeData }) {
               <h2 className="state__h">
                 {region}에서 {themeLabel} 조건에 맞는 매장이 없습니다.
               </h2>
-              <p>테마를 해제하면 같은 지역의 매장 {pool.length}곳이 다시 보입니다. 지역을 바꾸면 그 지역에서 같은 테마로 다시 찾습니다.</p>
+              <p>전체 {pool.length}곳</p>
               <div className="state__act">
                 <button type="button" className="btn btn--primary" onClick={() => pickTheme("all")}>
                   테마 해제
@@ -474,7 +539,7 @@ export function HomeView({ data }: { data: HomeData }) {
               </div>
             </div>
           ) : sections.length === 0 ? (
-            <p className="feed__none">이 지역에는 매출 상위 1%, 동네맛집, 회식 적합에 해당하는 매장이 없습니다. 아래 지도와 전체 매장에서 확인해 보세요.</p>
+            <p className="feed__none">매출 상위 1%, 동네맛집, 회식 적합 0곳</p>
           ) : (
             sections.map((c, i) => (
               <Curation
@@ -514,6 +579,20 @@ export function HomeView({ data }: { data: HomeData }) {
         </>
       )}
 
+      {search && regionNamed ? (
+        <SearchResults
+          search={search}
+          aux
+          clearHref={homeHref(scope, { excludeFranchise: exclude, theme, sort })}
+          feedNote={null}
+          exclude={exclude}
+          distanceOf={distanceOf}
+          onPick={openStore}
+          onShowChains={toggleExclude}
+          selectedId={selectedId}
+        />
+      ) : null}
+
       {selected && peakOpen ? (
         <Sheet kicker={evidenceLabel(selected, "peak")} title={displayName(selected.name)} onClose={() => setPeakOpen(false)}>
           <div className="evs">
@@ -543,7 +622,9 @@ export function HomeView({ data }: { data: HomeData }) {
 
 function SearchResults({
   search,
-  region,
+  aux = false,
+  clearHref = "/",
+  feedNote,
   exclude,
   distanceOf,
   onPick,
@@ -551,7 +632,12 @@ function SearchResults({
   selectedId,
 }: {
   search: SearchState;
-  region: string;
+  /** 지역 홈 아래 보조 섹션(그 낱말이 이름에 들어간 가게). 0곳이나 실패면 그리지 않는다 */
+  aux?: boolean;
+  /** 검색 지우기 주소(보조 섹션이면 지금 지역 홈) */
+  clearHref?: string;
+  /** 아래 피드의 지역 이름. 피드가 없으면(이름만 검색) null */
+  feedNote: string | null;
   exclude: boolean;
   distanceOf: (s: Store) => number | null;
   onPick: (s: Store, trigger: HTMLElement) => void;
@@ -565,6 +651,9 @@ function SearchResults({
   const shown = filtered
     .map((s, i) => ({ s, i, d: distanceOf(s) }))
     .sort((a, b) => (a.d ?? Number.POSITIVE_INFINITY) - (b.d ?? Number.POSITIVE_INFINITY) || a.i - b.i);
+  if (aux && search.status !== "ok") return null;
+  const label = aux ? `'${search.query}' 이름이 들어간 가게` : `${search.query} 검색`;
+  const after = feedNote ? ` 아래 피드는 ${feedNote}입니다.` : "";
   return (
     <section className="found" aria-labelledby="found-h" data-testid="search-results">
       <div className="found__head">
@@ -574,19 +663,19 @@ function SearchResults({
             : search.status === "empty"
               ? `${search.query} 검색 결과 없음`
               : shown.length === 0
-                ? `${search.query} 검색, 프랜차이즈 ${hidden}곳 숨김`
-                : `${search.query} 검색 ${shown.length}곳`}
+                ? `${label}, 프랜차이즈 ${hidden}곳 숨김`
+                : `${label} ${shown.length}곳`}
         </h2>
-        <NavLink href="/" className="link">
+        <NavLink href={clearHref} className="link">
           검색 지우기
         </NavLink>
       </div>
       {search.status === "error" ? (
         <p className="found__p" role="alert">
-          가게 검색이 실패했습니다. 잠시 뒤 다시 시도해 주세요. 아래 피드는 {region}입니다.
+          가게 검색이 실패했습니다. 잠시 뒤 다시 시도해 주세요.{after}
         </p>
       ) : search.status === "empty" ? (
-        <p className="found__p">이 이름의 가게를 찾지 못했습니다. 이름을 줄이거나 동네, 역 이름과 함께 검색해 보세요. 아래 피드는 {region}입니다.</p>
+        <p className="found__p">이 이름의 가게를 찾지 못했습니다. 이름을 줄이거나 동네, 역 이름과 함께 검색해 보세요.{after}</p>
       ) : (
         <>
           {hidden > 0 ? (
@@ -597,7 +686,7 @@ function SearchResults({
               </button>
             </p>
           ) : null}
-          {shown.length > 1 ? <p className="found__p">지점이 여러 곳입니다. 지역과 주소를 보고 고르세요.</p> : null}
+          {shown.length > 1 && !aux ? <p className="found__p">지점이 여러 곳입니다. 지역과 주소를 보고 고르세요.</p> : null}
           {shown.length > 0 ? (
             <ul className="found__list">
               {shown.slice(0, more).map(({ s, d }) => (

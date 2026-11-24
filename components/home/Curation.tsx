@@ -1,5 +1,6 @@
 "use client";
 
+import "@/app/catimg.css";
 import { useId, useState, useSyncExternalStore } from "react";
 import type { SectionId } from "@/lib/curation-assign";
 import type { Store } from "@/lib/stores";
@@ -36,6 +37,8 @@ function Arrow({ dir }: { dir: "prev" | "next" }) {
  * 큐레이션 한 섹션. 모바일은 다음 카드 일부가 보이는 가로 스와이프, PC는 3~4열 묶음과 넘김 버튼.
  * 어떤 카드를 싣는지는 부모가 정한다(화면 폭과 무관). 열 수는 넘김 버튼에만 쓴다.
  * 제목 옆 수는 실은 카드 수다. 앞 섹션과 겹쳐 뺀 수나 남은 수를 알리는 안내 줄은 두지 않는다.
+ * 카드 사진이 실제 매장 사진으로 읽히지 않게 첫 섹션 머리에만 업종 참고 이미지 안내 한 줄을 둔다.
+ * 첫 섹션 여부는 priority로 안다(HomeView가 첫 섹션에만 priority를 준다).
  */
 export function Curation({
   theme,
@@ -84,6 +87,11 @@ export function Curation({
             <span className="cur__n num">{stores.length}곳</span>
           </div>
           <p className="cur__sub">{sub}</p>
+          {priority ? (
+            <p className="catimg-note" data-testid="cat-image-note">
+              사진은 업종 참고 이미지입니다
+            </p>
+          ) : null}
         </div>
         <div className="cur__nav">
           <span className="cur__pos num" aria-live="polite">

@@ -185,7 +185,6 @@ export function MapSection({ stores, origin, originLabel, focus, me, near, locat
     }),
     [count],
   );
-  const sortLine = sort === "rank" ? "매출 상위 순" : origin ? `${originLabel}에서 가까운 순` : "가까운 순, 거리 기준점 없음";
   const hiddenRows = expanded ? 0 : Math.max(0, count - limit);
 
   return (
@@ -196,17 +195,17 @@ export function MapSection({ stores, origin, originLabel, focus, me, near, locat
             지도와 전체 매장
           </h2>
           <p className="mapsec__sub">
-            <span className="num">{count}</span>곳, {sortLine}
+            전체 <span className="num">{count}</span>곳
             {unplacedCount > 0 ? (
               <>
-                . 지도에 표시한 매장 <span className="num">{count - unplacedCount}</span>곳, 좌표가 없는 <span className="num">{unplacedCount}</span>곳은 목록 끝에 둡니다
+                , 지도 <span className="num">{count - unplacedCount}</span>곳
               </>
             ) : null}
           </p>
         </div>
         <div className="mapsec__tools">
           <div className="mapsec__sort" role="group" aria-label="목록 정렬">
-            <button type="button" className="mapsec__chip" data-testid="sort-near" aria-pressed={sort === "near"} onClick={() => sort !== "near" && onSort("near")}>
+            <button type="button" className="mapsec__chip" data-testid="sort-near" aria-pressed={sort === "near"} title={origin ? originLabel : undefined} onClick={() => sort !== "near" && onSort("near")}>
               가까운 순
             </button>
             <button type="button" className="mapsec__chip" data-testid="sort-rank" aria-pressed={sort === "rank"} onClick={() => sort !== "rank" && onSort("rank")}>

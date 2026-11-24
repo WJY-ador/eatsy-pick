@@ -13,9 +13,12 @@ export type Filters = {
   cat: string | null;
   /** 대표 피크 "요일-시간대"(예 "금-저녁") */
   peak: string | null;
-  /** 고객층 원문(예 "30대남성"). 1~3위 중 하나라도 그 고객층인 매장 */
+  /** 고객층 원문(예 "30대남성"). 1~3위 중 하나라도 그 고객층인 매장. 거는 화면은 없고 옛 공유 주소만 읽는다(칩으로 해제) */
   cust: string | null;
-  /** 1위 고객층 원문. 원본 rk01(customer1)이 그 고객층인 매장만. URL c1 */
+  /**
+   * 1위 고객층. URL c1. 손님 피라미드 칸 키(예 "20대이하여성", "30대남성")이고 rk01이 그 칸에 드는 매장.
+   * 옛 주소의 원문 값("20대여성", "10대남성")은 읽을 때 칸 키로 바꾼다(20대 이하는 10대와 20대를 묶는다).
+   */
   c1: string | null;
   /** 프랜차이즈 제외. 기본 true, URL fr=0이면 false */
   fr: boolean;
@@ -52,7 +55,7 @@ export function parseFilters(raw: RawParams): Filters {
     cat: clean(first(raw.cat), 40),
     peak: peak && PEAK_RE.test(peak) ? peak : null,
     cust: cust && /^[0-9가-힣 ]+$/.test(cust) ? cust : null,
-    c1: c1 && /^[0-9가-힣 ]+$/.test(c1) ? c1 : null,
+    c1: c1 && /^[0-9가-힣 ]+$/.test(c1) ? toCellKey(c1) : null,
     fr: first(raw.fr) !== "0",
     local: first(raw.local) === "1",
     hoesik: first(raw.hoesik) === "1",
@@ -96,7 +99,7 @@ export function sanitizeFilters(stores: Store[], f: Filters): Filters {
     cat: f.cat && stores.some((s) => s.category === f.cat) ? f.cat : null,
     peak: f.peak && stores.some((s) => peakKey(s) === f.peak) ? f.peak : null,
     cust: f.cust && stores.some((s) => s.customers.includes(f.cust as string)) ? f.cust : null,
-    c1: f.c1 && stores.some((s) => customer1Of(s) === f.c1) ? f.c1 : null,
+    c1: f.c1 && stores.some((s) => c1Matches(s, f.c1 as string)) ? f.c1 : null,
   };
 }
 
@@ -127,7 +130,7 @@ function matches(s: Store, f: Filters, except: readonly FilterKey[]): boolean {
   if (!except.includes("cat") && f.cat && s.category !== f.cat) return false;
   if (!except.includes("peak") && f.peak && peakKey(s) !== f.peak) return false;
   if (!except.includes("cust") && f.cust && !s.customers.includes(f.cust)) return false;
-  if (!except.includes("c1") && f.c1 && customer1Of(s) !== f.c1) return false;
+  if (!except.includes("c1") && f.c1 && !c1Matches(s, f.c1)) return false;
   return true;
 }
 
@@ -271,49 +274,203 @@ function sortBars(m: Map<string, number>, selected: string | null): Bar[] {
     .sort((a, b) => b.count - a.count || a.key.localeCompare(b.key, "ko"));
 }
 
-export type CustomerBars = { bars: Bar[]; sample: number };
-
-/** 고객층 1~3위에 그 고객층이 나온 매장 수. sample은 customers가 1개 이상인 매장 수 */
-export function computeCustomerBars(stores: Store[], selected: string | null = null): CustomerBars {
-  const m = new Map<string, number>();
-  let sample = 0;
-  for (const s of stores) {
-    if (s.customers.length === 0) continue;
-    sample += 1;
-    for (const c of new Set(s.customers)) m.set(c, (m.get(c) ?? 0) + 1);
-  }
-  return { bars: sortBars(m, selected), sample };
-}
-
-/**
- * 업종별 1위 고객층(원본 rk01) 분포. 업종마다 rk01이 그 고객층인 매장 수를 센다.
- * den은 그 업종에서 rk01이 확인된 매장 수, size는 그 업종의 매장 수(rk01 미확인 포함). 업종은 rk01 확인 매장 수 내림차순.
- */
-export type CategoryCustomer = { category: string; bars: Bar[]; den: number; size: number };
-
-export function computeCategoryCustomers(stores: Store[], selected: { cat: string | null; c1: string | null } = { cat: null, c1: null }): CategoryCustomer[] {
-  const by = new Map<string, { m: Map<string, number>; den: number; size: number }>();
-  for (const s of stores) {
-    const g = by.get(s.category) ?? { m: new Map<string, number>(), den: 0, size: 0 };
-    g.size += 1;
-    const c = customer1Of(s);
-    if (c) {
-      g.den += 1;
-      g.m.set(c, (g.m.get(c) ?? 0) + 1);
-    }
-    by.set(s.category, g);
-  }
-  if (selected.cat && !by.has(selected.cat)) by.set(selected.cat, { m: new Map(), den: 0, size: 0 });
-  return [...by]
-    .map(([category, g]) => ({ category, bars: sortBars(g.m, category === selected.cat ? selected.c1 : null), den: g.den, size: g.size }))
-    .sort((a, b) => b.den - a.den || b.size - a.size || a.category.localeCompare(b.category, "ko"));
-}
-
 /** 업종별 매장 수 내림차순(같으면 가나다순) */
 export function computeCategoryBars(stores: Store[], selected: string | null = null): Bar[] {
   const m = new Map<string, number>();
   for (const s of stores) m.set(s.category, (m.get(s.category) ?? 0) + 1);
   return sortBars(m, selected);
+}
+
+/** 손님 피라미드 세로 축. 위에서 아래로 그리는 순서는 화면이 정한다. 10대는 20대 이하에 넣는다 */
+export const AGE_BANDS = [
+  { key: "20대이하", label: "20대 이하" },
+  { key: "30대", label: "30대" },
+  { key: "40대", label: "40대" },
+  { key: "50대", label: "50대" },
+  { key: "60대이상", label: "60대 이상" },
+] as const;
+export const GENDERS = ["남성", "여성"] as const;
+export type Gender = (typeof GENDERS)[number];
+/** 피라미드 칸 하나. key는 c1 주소 값(예 "20대이하여성") */
+export type PyramidCell = { key: string; band: number; gender: Gender; count: number; top: Store[] };
+export type Pyramid = {
+  /** AGE_BANDS 순서. 칸마다 [남성, 여성] */
+  rows: [PyramidCell, PyramidCell][];
+  /** rk01이 확인된 매장 수 */
+  den: number;
+  /** rk01은 있지만 연령대, 성별을 읽지 못한 매장 수(칸에서 빠짐) */
+  unread: number;
+  max: number;
+};
+
+const C1_RE = /^(\d+)대(이상|이하)?(남성|여성)$/;
+
+/** rk01 원문이나 칸 키를 칸(연령대 순번, 성별)으로. 읽지 못하면 null */
+export function cellOf(raw: string): { band: number; gender: Gender } | null {
+  const m = C1_RE.exec(raw.replace(/\s+/g, ""));
+  if (!m) return null;
+  const age = Number(m[1]);
+  const band = age <= 20 ? 0 : age >= 60 ? 4 : age === 30 ? 1 : age === 40 ? 2 : age === 50 ? 3 : -1;
+  return band < 0 ? null : { band, gender: m[3] as Gender };
+}
+
+export function cellKey(band: number, gender: Gender): string {
+  return `${AGE_BANDS[band].key}${gender}`;
+}
+
+function isCellKey(v: string): boolean {
+  const c = cellOf(v);
+  return c !== null && cellKey(c.band, c.gender) === v;
+}
+
+/** 연령대와 성별을 읽을 수 있는 값은 칸 키로, 못 읽는 값은 그대로 둔다 */
+export function toCellKey(v: string): string {
+  const c = cellOf(v);
+  return c ? cellKey(c.band, c.gender) : v;
+}
+
+/** c1 조건. 칸 키면 칸으로 비교해 피라미드 칸 수와 같은 매장을 고른다. 칸으로 못 읽는 값만 원문 그대로 비교한다 */
+export function c1Matches(s: Store, c1: string): boolean {
+  const v = customer1Of(s);
+  if (!v) return false;
+  if (!isCellKey(c1)) return v === c1;
+  const c = cellOf(v);
+  return c !== null && cellKey(c.band, c.gender) === c1;
+}
+
+/** c1 값의 화면 글. "20대이하여성" → "20대 이하 여성", "60대이상남성" → "60대 이상 남성" */
+export function c1Label(v: string): string {
+  return v
+    .replace(/(이상|이하)/, " $1")
+    .replace(/(남성|여성)$/, " $1")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** 매출 상위 순(ccgRank 오름차순, 값 없으면 뒤). 같으면 받은 순서 */
+function byRank(a: Store, b: Store): number {
+  const x = a.ccgRank ?? Number.POSITIVE_INFINITY;
+  const y = b.ccgRank ?? Number.POSITIVE_INFINITY;
+  return x === y ? 0 : x < y ? -1 : 1;
+}
+
+/** 1위 고객층(rk01)을 연령대 5단 × 성별 칸으로 센다. 칸마다 매출 상위 3곳을 같이 준다 */
+export function computePyramid(stores: Store[], topN = 3): Pyramid {
+  const groups = AGE_BANDS.map(() => [[] as Store[], [] as Store[]]);
+  let den = 0;
+  let unread = 0;
+  for (const s of stores) {
+    const v = customer1Of(s);
+    if (!v) continue;
+    den += 1;
+    const c = cellOf(v);
+    if (!c) {
+      unread += 1;
+      continue;
+    }
+    groups[c.band][GENDERS.indexOf(c.gender)].push(s);
+  }
+  let max = 0;
+  const rows = groups.map((pair, band) => {
+    const cells = pair.map((list, gi) => {
+      max = Math.max(max, list.length);
+      return { key: cellKey(band, GENDERS[gi]), band, gender: GENDERS[gi], count: list.length, top: [...list].sort(byRank).slice(0, topN) };
+    });
+    return [cells[0], cells[1]] as [PyramidCell, PyramidCell];
+  });
+  return { rows, den, unread, max };
+}
+
+/** 트리맵 블록 자리(단위 %). 그림 상자 왼쪽 위가 0 */
+export type TreeRect = { key: string; count: number; x: number; y: number; w: number; h: number };
+
+/**
+ * 면적이 값에 비례하는 블록 배치(squarified). items는 값 내림차순, 0은 넣지 않는다.
+ * ratio는 그림 상자의 가로 ÷ 세로. 반환 자리는 상자 기준 %다.
+ */
+export function squarify(items: { key: string; count: number }[], ratio: number): TreeRect[] {
+  const total = items.reduce((a, b) => a + b.count, 0);
+  if (total <= 0) return [];
+  const W = ratio;
+  const H = 1;
+  const scale = (W * H) / total;
+  const out: TreeRect[] = [];
+  let x = 0;
+  let y = 0;
+  let w = W;
+  let h = H;
+  const worst = (row: number[], side: number) => {
+    const sum = row.reduce((a, b) => a + b, 0);
+    const mx = Math.max(...row);
+    const mn = Math.min(...row);
+    return Math.max((side * side * mx) / (sum * sum), (sum * sum) / (side * side * mn));
+  };
+  let i = 0;
+  while (i < items.length) {
+    const side = Math.min(w, h);
+    const row: number[] = [items[i].count * scale];
+    let j = i + 1;
+    while (j < items.length) {
+      const next = [...row, items[j].count * scale];
+      if (worst(next, side) > worst(row, side)) break;
+      row.push(items[j].count * scale);
+      j += 1;
+    }
+    const sum = row.reduce((a, b) => a + b, 0);
+    const last = j >= items.length;
+    if (w >= h) {
+      // 왼쪽에 세로 줄을 채운다
+      const cw = last ? w : sum / h;
+      let cy = y;
+      row.forEach((a, k) => {
+        const ch = k === row.length - 1 ? y + h - cy : a / cw;
+        out.push({ key: items[i + k].key, count: items[i + k].count, x, y: cy, w: cw, h: ch });
+        cy += ch;
+      });
+      x += cw;
+      w -= cw;
+    } else {
+      // 위에 가로 줄을 채운다
+      const ch = last ? h : sum / w;
+      let cx = x;
+      row.forEach((a, k) => {
+        const cw = k === row.length - 1 ? x + w - cx : a / ch;
+        out.push({ key: items[i + k].key, count: items[i + k].count, x: cx, y, w: cw, h: ch });
+        cx += cw;
+      });
+      y += ch;
+      h -= ch;
+    }
+    i = j;
+  }
+  return out.map((r) => ({ ...r, x: (r.x / W) * 100, y: (r.y / H) * 100, w: (r.w / W) * 100, h: (r.h / H) * 100 }));
+}
+
+export type TreemapPlan = {
+  /** 블록으로 그릴 업종(매장 수 내림차순, 0곳 제외) */
+  blocks: Bar[];
+  /** "그 밖" 블록으로 묶은 업종. 2개 이상일 때만 묶는다 */
+  rest: Bar[];
+};
+
+/**
+ * 트리맵에 블록으로 둘 업종과 묶을 업종을 나눈다. 앞에서부터 최대 maxBlocks개, 비중 minShare 이상만 블록으로 둔다.
+ * 고른 업종은 묶음에 들어가도 블록으로 끌어올린다. 묶음이 한 업종뿐이면 묶지 않는다. 0곳 업종은 그리지 않는다(해제는 칩으로).
+ */
+export function planTreemap(bars: Bar[], selected: string | null, maxBlocks = 8, minShare = 0.03): TreemapPlan {
+  const live = bars.filter((b) => b.count > 0);
+  const total = live.reduce((a, b) => a + b.count, 0);
+  const blocks: Bar[] = [];
+  const rest: Bar[] = [];
+  for (const b of live) {
+    if (blocks.length === 0 || (blocks.length < maxBlocks && b.count / total >= minShare)) blocks.push(b);
+    else rest.push(b);
+  }
+  const sel = rest.findIndex((b) => b.key === selected);
+  if (sel >= 0) blocks.push(...rest.splice(sel, 1));
+  if (rest.length === 1) blocks.push(...rest.splice(0, 1));
+  blocks.sort((a, b) => b.count - a.count || a.key.localeCompare(b.key, "ko"));
+  return { blocks, rest };
 }
 
 export type Analysis = {
@@ -327,9 +484,8 @@ export type Analysis = {
   kpis: Kpis;
   /** 각 차트는 자기 필터를 뺀 나머지 필터로 계산한다 */
   peak: PeakGrid;
-  customers: CustomerBars;
-  /** 업종별 1위 고객층 분포. 업종과 1위 고객층 필터만 뺀 나머지 필터로 센다 */
-  categoryCustomers: CategoryCustomer[];
+  /** 손님 피라미드. 1위 고객층 필터(c1)만 뺀 나머지 필터와 KPI 조건(동네맛집, 회식 적합)으로 센다 */
+  pyramid: Pyramid;
   categories: Bar[];
   /** 요약 줄(현재 조건 = matched 기준) */
   summary: Summary;
@@ -349,47 +505,11 @@ export function analyze(stores: Store[], filters: Filters): Analysis {
     matched,
     kpis: computeKpis(filtered),
     peak: computePeakGrid(applyFilters(stores, f, "peak"), base, f.peak),
-    customers: computeCustomerBars(applyFilters(stores, f, "cust"), f.cust),
-    categoryCustomers: computeCategoryCustomers(applyFilters(stores, f, ["cat", "c1"]), { cat: f.cat, c1: f.c1 }),
+    pyramid: computePyramid(matchFlags(applyFilters(stores, f, "c1"), f)),
     categories: computeCategoryBars(applyFilters(stores, f, "cat"), f.cat),
     summary: summarize(matched),
     franchiseCount: stores.filter((s) => s.franchise).length,
   };
-}
-
-/** 산점도 점 하나. ccg와 all은 원본 백분위(0~100, 작을수록 상위) */
-export type ScatterPoint = { store: Store; ccg: number; all: number };
-
-function pct(v: number | null): number | null {
-  return typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= 100 ? v : null;
-}
-
-/** 시군구(ccgSaleRnk)와 전국(allSaleRnk) 두 값이 모두 0~100의 수인 매장만. 순서는 받은 순서 */
-export function scatterPoints(stores: Store[]): ScatterPoint[] {
-  const out: ScatterPoint[] = [];
-  for (const s of stores) {
-    const ccg = pct(s.ccgRank);
-    const all = pct(s.allRank);
-    if (ccg !== null && all !== null) out.push({ store: s, ccg, all });
-  }
-  return out;
-}
-
-/** 화면에서 겹치는 점 묶음. x, y는 묶음을 그릴 자리(첫 매장의 값) */
-export type ScatterGroup = { x: number; y: number; points: ScatterPoint[] };
-
-/**
- * 겹치는 점을 묶는다. 이미 있는 묶음의 자리와 가로 tx, 세로 ty(% 단위) 안이면 그 묶음에 넣고, 아니면 새 묶음을 연다.
- * 묶음 자리끼리는 tx 또는 ty 이상 떨어지므로, 그 크기 이하로 그린 표식은 서로 겹치지 않는다.
- */
-export function groupScatter(points: ScatterPoint[], tx: number, ty: number): ScatterGroup[] {
-  const groups: ScatterGroup[] = [];
-  for (const p of points) {
-    const g = groups.find((q) => Math.abs(q.x - p.ccg) < tx && Math.abs(q.y - p.all) < ty);
-    if (g) g.points.push(p);
-    else groups.push({ x: p.ccg, y: p.all, points: [p] });
-  }
-  return groups;
 }
 
 /** 원본 백분위 그대로: 0.04 → "0.04%", 100 → "100%", null → "정보 없음". 올림, 반올림 없음. */

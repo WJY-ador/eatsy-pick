@@ -1,6 +1,6 @@
 "use client";
 
-import { DAYS, type Bar, type PeakGrid, heatStep } from "@/lib/analytics";
+import { DAYS, type PeakGrid, heatStep } from "@/lib/analytics";
 import s from "./analysis.module.css";
 
 /**
@@ -98,80 +98,6 @@ export function PeakTable({
         <span>많음, 최대 {grid.max}곳</span>
         {onPick && grid.missing > 0 ? <span>, 피크 정보 없음 {grid.missing}곳 제외</span> : null}
       </div>
-    </>
-  );
-}
-
-/**
- * 가로 막대 목록. 막대 하나가 버튼이다. 값은 막대 끝 숫자로 직접 적는다.
- * 고른 항목이 있으면 나머지 막대를 옅게 하고, 고른 막대는 테두리와 굵기로 한 번 더 구분한다.
- */
-export function BarChart({
-  name,
-  bars,
-  selected,
-  onPick,
-  label,
-  limit,
-  expanded,
-  onExpand,
-  moreLabel,
-}: {
-  name: "cat" | "cust" | "c1";
-  bars: Bar[];
-  selected: string | null;
-  onPick: (key: string) => void;
-  label: (key: string) => string;
-  limit?: number;
-  expanded?: boolean;
-  onExpand?: () => void;
-  moreLabel?: (hidden: number) => string;
-}) {
-  if (bars.length === 0) return <p className={s.empty}>보여 줄 항목이 없습니다.</p>;
-  const max = Math.max(1, ...bars.map((b) => b.count));
-  let shown = bars;
-  if (limit && !expanded && bars.length > limit) {
-    shown = bars.slice(0, limit);
-    const sel = bars.find((b) => b.key === selected);
-    if (sel && !shown.includes(sel)) shown = [...shown, sel];
-  }
-  const hidden = bars.length - shown.length;
-  return (
-    <>
-      <ul className={`${s.bars} ${selected ? s.dim : ""}`} data-chart={name}>
-        {shown.map((b) => {
-          const pressed = selected === b.key;
-          return (
-            <li key={b.key}>
-              <button
-                type="button"
-                className={s.bar}
-                data-key={b.key}
-                data-count={b.count}
-                aria-pressed={pressed}
-                aria-label={`${label(b.key)} ${b.count}곳${pressed ? ", 선택됨" : ""}`}
-                onClick={() => onPick(b.key)}
-              >
-                <span className={s.barLabel}>{label(b.key)}</span>
-                <span className={s.barTrack} aria-hidden="true">
-                  <span className={s.barFill} style={{ width: `${(b.count / max) * 100}%` }} />
-                </span>
-                <span className={s.barValue}>{b.count}</span>
-              </button>
-            </li>
-          );
-        })}
-      </ul>
-      {hidden > 0 && onExpand && moreLabel ? (
-        <button type="button" className={s.more} aria-expanded={false} onClick={onExpand}>
-          {moreLabel(hidden)}
-        </button>
-      ) : null}
-      {expanded && limit && bars.length > limit && onExpand ? (
-        <button type="button" className={s.more} aria-expanded={true} onClick={onExpand}>
-          상위 {limit}개만 보기
-        </button>
-      ) : null}
     </>
   );
 }

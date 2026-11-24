@@ -83,9 +83,13 @@ export function AreaReportBody({ v, r }: { v: AreaView; r: AreaReport }) {
           ) : (
             <p className="report__empty">이 업종의 결제 데이터가 이 상권에서 조회되지 않았습니다.</p>
           )}
-          <a className="link" href={viewHref(v, g.group.slug)}>
-            {g.group.name} 20곳과 분포 보기
-          </a>
+          {/* 업종 페이지는 업종 최대 2개, 동 최대 3개로 따로 조회해 이 칸과 수가 다르다. 수를 쓰지 않는다.
+              이 칸이 0곳이면 링크를 뺀다(2026-11-24 하동역 실측: 빈 칸의 업종 페이지도 둘째 업종까지 0곳). */}
+          {g.rows.length > 0 ? (
+            <a className="link" href={viewHref(v, g.group.slug)}>
+              {g.group.name} 자세히 보기
+            </a>
+          ) : null}
         </section>
       ))}
     </>

@@ -28,7 +28,7 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
   if (v === null) notFound();
   const name = v?.title ?? "직접 추가한 지역";
   const title = `${name} ${group.name} 결제 랭킹 | ${SITE_NAME}`;
-  const description = `${name} ${group.name} 가게 20곳의 시군구 매출 순위와 붐비는 요일, 시간대, 주 고객층 분포를 BC카드 결제 데이터로 봅니다.`;
+  const description = `${name} ${group.name} 가게의 시군구 매출 순위와 붐비는 요일, 시간대, 주 고객층 분포를 BC카드 결제 데이터로 봅니다.`;
   // openGraph와 twitter는 layout 값을 통째로 덮으므로 type, locale, siteName도 함께 적는다.
   return {
     title: { absolute: title },

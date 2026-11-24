@@ -1,5 +1,7 @@
 // 홈 URL 계약. 서버 page와 클라이언트가 같이 쓴다. Next 전용 API와 proj4를 import하지 않는다.
 //   area=<slug> | loc=<동네, 구, 역, 프리셋 이름>(+ near=1) | q=<통합 검색어>&id=<Store.id> | fr=0
+//   loc + q(id 없음)는 지역 홈 + 그 이름이 들어간 가게다(맨 낱말 검색이 지역으로 풀리면 서버가 이 꼴로 보낸다).
+//   범위 없는 q는 가게 이름 검색만이다.
 //   | t=<테마 top1|local|hoesik, 칩에서 뺀 y2030은 옛 링크용으로 계속 읽는다> | s=rank
 //   옛 링크의 occ, n, d(거리 구간)는 읽지 않는다.
 
@@ -158,6 +160,9 @@ export function parseHome(raw: Raw): HomeQuery {
       q = null;
     }
   }
+  // 옛 공유 링크(area=gangnam&q=가게 이름, 예전 canonical이 기본 상권을 붙였다)는 이름 검색으로 읽는다.
+  // 기본 상권 피드를 이름 검색 아래에 다시 붙이지 않게 한다. 영수증 링크(id)와 loc는 그대로 둔다.
+  if (q && !id && !food && first(raw.area) === DEFAULT_SLUG && !first(raw.loc)) scope = null;
   const isDefault = scope === null && !food;
   return {
     scope: scope ?? areaScope(DEFAULT_SLUG),

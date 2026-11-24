@@ -21,7 +21,7 @@ export async function generateMetadata({ params }: PageProps<"/area/[slug]/[grou
   const group = groupBySlug(g);
   if (!area || !group) notFound();
   const title = `${area.name} ${group.name} 결제 랭킹 | ${SITE_NAME}`;
-  const description = `${area.name} 근처 ${group.name} 가게 20곳의 시군구 매출 순위와 붐비는 요일, 시간대, 주 고객층 분포를 BC카드 결제 데이터로 봅니다.`;
+  const description = `${area.name} 근처 ${group.name} 가게의 시군구 매출 순위와 붐비는 요일, 시간대, 주 고객층 분포를 BC카드 결제 데이터로 봅니다.`;
   const url = `/area/${area.slug}/${group.slug}`;
   return { title: { absolute: title }, description, alternates: { canonical: url }, openGraph: { title, description, url, images: shareImages(title) }, twitter: { card: "summary_large_image", title, description, images: shareTwitterImages(title) } };
 }

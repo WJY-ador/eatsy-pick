@@ -8,13 +8,15 @@ import { MerLink } from "@/components/MerLink";
 import { StoreMap } from "@/components/StoreMap";
 import { Receipt } from "@/components/home/Receipt";
 import {
-  type CategoryCustomer,
   type Flag,
   type FilterKey,
   type Filters,
   type Ratio,
   type Summary,
   analyze,
+  c1Label,
+  cellKey,
+  cellOf,
   formatRank,
   hasFlag,
   hasSelection,
@@ -27,13 +29,14 @@ import {
 import { customerLabel, peakLabel } from "@/lib/labels";
 import { displayName } from "@/lib/store-view";
 import type { AreaDataset, Store } from "@/lib/stores";
-import { BarChart, PeakTable } from "./Charts";
-import { Scatter } from "./Scatter";
+import { PeakTable } from "./Charts";
+import { useHelp } from "./Help";
+import { PyramidChart } from "./Pyramid";
+import { Treemap } from "./Treemap";
 import { type Scope, PAGE_INTRO, analysisPath, foodLabel, pageTitle, receiptHref } from "./scope";
 import { ShareButton } from "./ShareButton";
 import s from "./analysis.module.css";
 
-const CATEGORY_LIMIT = 12;
 /** 매장 목록은 처음에 이만큼 보이고, 더 보기를 누를 때마다 이만큼 늘린다 */
 const LIST_STEP = 5;
 
@@ -43,6 +46,18 @@ function peakText(key: string): string {
 }
 
 const FLAG_NAME: Record<Flag, string> = { local: "동네맛집", hoesik: "회식 적합" };
+/** 뜻 글. 영수증 배지 도움말과 같은 정의다 */
+const FLAG_HELP: Record<Flag, string> = {
+  local: "동네 고객 비율이 시군구 평균보다 높은 매장입니다.",
+  hoesik: "저녁 시간대 단체 결제 이력이 있는 매장입니다.",
+};
+
+/** 앞말 끝 글자에 받침이 있으면 받침용 조사, 없으면 다른 조사. 한글이 아니면 받침용으로 본다 */
+function josa(word: string, withFinal: string, without: string): string {
+  const code = word.charCodeAt(word.length - 1) - 0xac00;
+  if (code < 0 || code > 11171) return withFinal;
+  return code % 28 === 0 ? without : withFinal;
+}
 
 /** 요약 줄에 이름을 다 적는 동률 수. 넘으면 "외 N개"로 줄인다 */
 const SUMMARY_NAMES = 3;
@@ -59,13 +74,16 @@ function peakFull(key: string): string {
 
 /**
  * 요약 줄. 현재 조건에 맞는 매장(지도, 목록과 같은 집합) 중 대표 피크 최빈 조합과 원본 rk01 최빈 고객층을 매장 수로 쓴다.
- * 동률이면 모두 적고 "각각"을 붙인다. 값이 확인된 매장이 없는 구절은 뺀다. 둘 다 없으면 줄을 그리지 않는다.
+ * 짧은 한 문장으로 쓴다. 동률이면 모두 적고 "각각"을 붙인다. 값이 확인된 매장이 없는 구절은 뺀다. 둘 다 없으면 줄을 그리지 않는다.
+ * 값이 확인된 매장 수(분모)는 화면에 적지 않고 data-*-den으로만 남긴다.
  * 매장 수일 뿐 고객 비중, 직업, 지금의 혼잡이나 대기를 뜻하지 않는다.
  */
 function SummaryLine({ sum }: { sum: Summary }) {
   const { peak, customer } = sum;
   if (!peak && !customer) return null;
   const each = (n: number) => (n > 1 ? "각각 " : "");
+  const peakNames = peak ? namesText(peak.leaders, peakFull, "조합") : "";
+  const custNames = customer ? namesText(customer.leaders, customerLabel, "고객층") : "";
   return (
     <p
       className={s.summary}
@@ -78,84 +96,32 @@ function SummaryLine({ sum }: { sum: Summary }) {
       data-cust-num={customer?.num ?? ""}
       data-cust-den={customer?.den ?? ""}
     >
-      조건에 맞는 매장 <span className={s.num}>{sum.total}곳</span> 중{" "}
+      <span className={s.num}>{sum.total}곳</span> 중{" "}
       {peak ? (
         <>
-          대표 피크가 <strong>{namesText(peak.leaders, peakFull, "조합")}</strong>인 매장이 {each(peak.leaders.length)}
+          대표 피크는 <strong>{peakNames}</strong>
+          {josa(peakNames, "이", "가")} {each(peak.leaders.length)}
           <span className={s.num}>{peak.num}곳</span>
-          {customer ? "으로 가장 많고" : "으로 가장 많습니다"}
-          <span className={s.summarySub}>
-            (대표 피크 확인 <span className={s.num}>{peak.den}곳</span>)
-          </span>
-          {customer ? ", " : "."}
+          {customer ? ", " : "으로 가장 많습니다."}
         </>
       ) : null}
       {customer ? (
         <>
-          1위 고객층이 <strong>{namesText(customer.leaders, customerLabel, "고객층")}</strong>인 매장이 {each(customer.leaders.length)}
-          <span className={s.num}>{customer.num}곳</span>으로 가장 많습니다
-          <span className={s.summarySub}>
-            (1위 고객층 확인 <span className={s.num}>{customer.den}곳</span>)
-          </span>
-          .
+          1위 고객층은 <strong>{custNames}</strong>
+          {josa(custNames, "이", "가")} {each(customer.leaders.length)}
+          <span className={s.num}>{customer.num}곳</span>으로 가장 많습니다.
         </>
       ) : null}
     </p>
   );
 }
 
-type CustMode = "rank" | "cat";
-type ChartTab = "peak" | "cust" | "cat" | "rank";
+type ChartTab = "peak" | "cust" | "cat";
 const TABS: { id: ChartTab; name: string }[] = [
   { id: "peak", name: "대표 피크" },
-  { id: "cust", name: "주 고객층" },
+  { id: "cust", name: "손님" },
   { id: "cat", name: "업종" },
-  { id: "rank", name: "매출 순위" },
 ];
-
-/**
- * 업종별 1위 고객층(원본 rk01). 업종 하나를 골라 그 업종 안의 rk01 분포를 막대로 본다.
- * 막대를 누르면 업종(cat)과 1위 고객층(c1) 두 조건을 지도와 목록에 걸고, 눌린 막대를 다시 누르면 두 조건을 함께 푼다.
- * 부모가 key(cat, c1)로 다시 그려 조건이 바뀌면 고른 업종을 조건의 업종으로 되돌린다. 조건이 걸린 채로 다른 업종을 골라 볼 수 있다.
- */
-function CategoryCustomerChart({
-  rows,
-  applied,
-  setFilters,
-}: {
-  rows: CategoryCustomer[];
-  applied: Filters;
-  setFilters: (f: Filters) => void;
-}) {
-  const [chosen, setChosen] = useState<string | null>(null);
-  const options = rows.filter((r) => r.den > 0 || r.category === applied.cat);
-  const want = chosen ?? applied.cat;
-  const row = options.find((r) => r.category === want) ?? options[0];
-  if (!row) return <p className={s.empty}>1위 고객층이 확인된 매장이 없습니다.</p>;
-  const active = applied.cat === row.category ? applied.c1 : null;
-  const onPick = (key: string) =>
-    setFilters(active === key ? { ...applied, cat: null, c1: null } : { ...applied, cat: row.category, c1: key });
-  return (
-    <div data-testid="cust-by-cat" data-cat={row.category} data-den={row.den} data-size={row.size}>
-      <label className={s.pickerLabel}>
-        <span>업종</span>
-        <select className={s.picker} value={row.category} onChange={(e) => setChosen(e.target.value)} data-testid="cust-cat-select">
-          {options.map((r) => (
-            <option key={r.category} value={r.category}>
-              {r.category} ({r.den}곳)
-            </option>
-          ))}
-        </select>
-      </label>
-      <p className={s.caption}>
-        {row.category}에서 1위 고객층(rk01)이 확인된 매장 <span className={s.num}>{row.den}곳</span> / 업종 매장{" "}
-        <span className={s.num}>{row.size}곳</span>. 막대를 누르면 이 업종과 1위 고객층으로 지도와 목록을 좁히고, 다시 누르면 두 조건을
-        함께 풉니다.
-      </p>
-      <BarChart name="c1" bars={row.bars} selected={active} onPick={onPick} label={customerLabel} />
-    </div>
-  );
-}
 
 function FilterIcon(): JSX.Element {
   return (
@@ -174,40 +140,40 @@ function CheckIcon(): JSX.Element {
 }
 
 /**
- * 동네맛집, 회식 적합 KPI. 수치는 기준 집합(KPI 조건을 걸기 전)에서 센다. 누르면 그 조건으로 지도와 목록을 좁힌다.
- * 해당 0곳(값은 확인됨)과 분모 0(정보 없음)을 다른 글로 보인다. 해당 매장이 없으면 켤 수 없고, 켜져 있으면 언제든 끌 수 있다.
+ * 방문 성격 게이지(동네맛집, 회식 적합). 비율은 해당 매장 수 ÷ 값이 확인된 매장 수, 기준 집합(KPI 조건을 걸기 전)에서 센다.
+ * 누르면 그 조건으로 지도와 목록을 좁히고 다시 누르면 푼다. 분모 0은 "정보 없음". 해당 매장이 없으면 켤 수 없고, 켜져 있으면 언제든 끌 수 있다.
  */
-function FlagKpi({ flag, ratio, on, onToggle }: { flag: Flag; ratio: Ratio; on: boolean; onToggle: () => void }) {
+function FlagGauge({ flag, ratio, on, onToggle }: { flag: Flag; ratio: Ratio; on: boolean; onToggle: () => void }) {
   const pct = ratioPercent(ratio);
-  const dtId = `kpi-${flag}-name`;
-  const btnId = `kpi-${flag}-btn`;
+  const help = useHelp(FLAG_NAME[flag], FLAG_HELP[flag]);
+  const value = pct === null ? "정보 없음" : `${ratio.num}곳, ${pct}%`;
   return (
-    <div className={s.kpi}>
-      <dt id={dtId}>{FLAG_NAME[flag]}</dt>
-      <dd>
-        <button
-          id={btnId}
-          type="button"
-          className={s.kpiBtn}
-          data-testid="kpi-filter"
-          data-flag={flag}
-          data-num={ratio.num}
-          data-den={ratio.den}
-          aria-pressed={on}
-          aria-labelledby={`${dtId} ${btnId}`}
-          disabled={!on && ratio.num === 0}
-          onClick={onToggle}
-        >
-          <span className={`${s.kpiValue} ${s.num}`}>{pct === null ? "정보 없음" : `해당 ${ratio.num}곳`}</span>{" "}
-          <span className={s.kpiSub}>
-            / 값 확인 {ratio.den}곳{pct === null ? "" : `, ${pct}%`}
-          </span>{" "}
-          <span className={s.kpiAction}>
-            {on ? <CheckIcon /> : <FilterIcon />}
-            {on ? "적용 중, 누르면 해제" : ratio.num === 0 ? "좁힐 매장 없음" : "지도, 목록 좁히기"}
-          </span>
-        </button>
-      </dd>
+    <div className={s.gauge} data-testid="gauge" data-flag={flag}>
+      <div className={s.gaugeHead}>
+        <span className={s.gaugeName}>{FLAG_NAME[flag]}</span>
+        {help.button}
+      </div>
+      <button
+        type="button"
+        className={s.gaugeBtn}
+        data-testid="kpi-filter"
+        data-flag={flag}
+        data-num={ratio.num}
+        data-den={ratio.den}
+        aria-pressed={on}
+        aria-label={`${FLAG_NAME[flag]} ${value}${on ? ", 지도와 목록에 적용 중" : ", 누르면 지도와 목록을 좁힙니다"}`}
+        disabled={!on && ratio.num === 0}
+        onClick={onToggle}
+      >
+        <span className={s.gaugeTrack} aria-hidden="true">
+          <span className={s.gaugeFill} style={{ width: `${pct ?? 0}%` }} />
+        </span>
+        <span className={`${s.gaugeValue} ${s.num}`}>{value}</span>
+        <span className={s.gaugeIcon} aria-hidden="true">
+          {on ? <CheckIcon /> : <FilterIcon />}
+        </span>
+      </button>
+      {help.panel}
     </div>
   );
 }
@@ -265,7 +231,6 @@ function StoreList({ stores, scope, selected }: { stores: Store[]; scope: Scope;
 export function AnalysisView({ dataset, scope, fellBack }: { dataset: AreaDataset; scope: Scope; fellBack: boolean }) {
   const sp = useSearchParams();
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [allCats, setAllCats] = useState(false);
   const [tab, setTab] = useState<ChartTab>("peak");
   // 같은 화면의 결제 영수증(산점도에서 연다). 닫으면 연 요소로 포커스를 돌려준다.
   const [receiptId, setReceiptId] = useState<string | null>(null);
@@ -280,13 +245,6 @@ export function AnalysisView({ dataset, scope, fellBack }: { dataset: AreaDatase
   const a = useMemo(() => analyze(dataset.stores, filters), [dataset.stores, filters]);
   const applied = a.filters;
   const path = analysisPath(scope, applied);
-  // 주 고객층 차트 보기. 1위 고객층 조건(c1)이 걸린 주소로 오면 업종별 보기로 연다(눌린 막대가 보이게).
-  const [custMode, setCustMode] = useState<CustMode>(applied.c1 ? "cat" : "rank");
-  const [seenC1, setSeenC1] = useState(applied.c1);
-  if (seenC1 !== applied.c1) {
-    setSeenC1(applied.c1);
-    if (applied.c1) setCustMode("cat");
-  }
 
   // 들어온 주소에 버려진 값이 있으면 실제로 적용한 필터의 주소로 바꿔 둔다(기록은 늘리지 않는다).
   useEffect(() => {
@@ -314,7 +272,6 @@ export function AnalysisView({ dataset, scope, fellBack }: { dataset: AreaDatase
     h?.scrollIntoView({ block: "start" });
     h?.focus({ preventScroll: true });
   };
-  const top = a.kpis.topCustomer;
   const empty = dataset.stores.length === 0;
   const food = foodLabel(scope);
   const receiptStore = receiptId ? (dataset.stores.find((st) => st.id === receiptId) ?? null) : null;
@@ -327,19 +284,25 @@ export function AnalysisView({ dataset, scope, fellBack }: { dataset: AreaDatase
     setReceiptId(null);
     const t = opener.current;
     if (t && document.contains(t)) return t.focus();
-    // 고른 목록이 사라졌으면 그 매장이 든 점(또는 묶음)으로 돌려준다.
-    const pts = document.querySelectorAll<HTMLElement>('[data-testid="scatter-point"]');
-    const back = [...pts].find((el) => el.dataset.storeId === id || (el.dataset.storeIds ?? "").split(" ").includes(id ?? ""));
-    back?.focus();
+    // 연 이름이 다시 그려졌으면 같은 매장 이름으로 돌려준다.
+    const names = document.querySelectorAll<HTMLElement>('[data-testid="pyramid-store"]');
+    [...names].find((el) => el.dataset.storeId === id)?.focus();
   };
 
   const chips: { key: FilterKey | Flag; text: string }[] = [];
   if (applied.cat) chips.push({ key: "cat", text: `업종 ${applied.cat}` });
   if (applied.peak) chips.push({ key: "peak", text: `피크 ${peakText(applied.peak)}` });
   if (applied.cust) chips.push({ key: "cust", text: `고객층 1~3위에 ${customerLabel(applied.cust)}` });
-  if (applied.c1) chips.push({ key: "c1", text: `1위 고객층 ${customerLabel(applied.c1)}` });
+  if (applied.c1) chips.push({ key: "c1", text: `1위 고객층 ${c1Label(applied.c1)}` });
   if (applied.local) chips.push({ key: "local", text: FLAG_NAME.local });
   if (applied.hoesik) chips.push({ key: "hoesik", text: FLAG_NAME.hoesik });
+  const pickC1 = (key: string) => {
+    const c = applied.c1 ? cellOf(applied.c1) : null;
+    const now = c ? cellKey(c.band, c.gender) : null;
+    setFilters({ ...applied, c1: now === key ? null : key });
+  };
+  const peakHelp = useHelp("대표 피크", "셀 숫자는 그 요일과 시간대가 대표 피크인 매장 수입니다. 대표 피크는 결제 데이터로 본 매장별 가장 붐비는 요일과 시간대이며, 지금의 혼잡이나 대기 시간이 아닙니다.");
+  const pyrHelp = useHelp("손님 피라미드", "칸의 수는 그 연령대와 성별이 1위 고객층인 매장 수입니다. 손님 수나 비율이 아닙니다.");
   const dropChip = (key: FilterKey | Flag) =>
     setFilters(key === "local" || key === "hoesik" ? { ...applied, [key]: false } : { ...applied, [key]: null });
   const matchCount = (where: "map" | "list") => (
@@ -443,32 +406,26 @@ export function AnalysisView({ dataset, scope, fellBack }: { dataset: AreaDatase
         <>
           <section className={s.panel} aria-label="핵심 지표">
             <SummaryLine sum={a.summary} />
-            <p className={s.kpiNote}>
-              동네맛집은 동네 고객 비율이 시군구 평균보다 높은 매장, 회식 적합은 저녁 시간대 단체 결제 이력이 있는 매장입니다. 눌러서 지도와
-              목록을 좁혀도 지표 숫자는 그대로입니다.
-            </p>
-            <dl className={s.kpis} data-testid="kpis">
-              <div className={s.kpi}>
-                <dt>분석 매장 수</dt>
-                <dd>
-                  <span className={`${s.kpiValue} ${s.num}`} data-testid="kpi-count">
-                    {a.kpis.count}곳
-                  </span>
-                  <span className={s.kpiSub}>프랜차이즈 {applied.fr ? "제외" : "포함"}, 필터 적용</span>
-                </dd>
+            <div className={s.kpiRow}>
+              <dl className={s.kpis} data-testid="kpis">
+                <div className={s.kpi}>
+                  <dt>분석 매장 수</dt>
+                  <dd>
+                    <span className={`${s.kpiValue} ${s.num}`} data-testid="kpi-count">
+                      {a.kpis.count}곳
+                    </span>
+                    <span className={s.kpiSub}>프랜차이즈 {applied.fr ? "제외" : "포함"}, 필터 적용</span>
+                  </dd>
+                </div>
+              </dl>
+              <div className={s.gauges} role="group" aria-labelledby="gauges-title">
+                <p id="gauges-title" className={s.gaugesTitle}>
+                  방문 성격
+                </p>
+                <FlagGauge flag="local" ratio={a.kpis.local} on={applied.local} onToggle={flip("local")} />
+                <FlagGauge flag="hoesik" ratio={a.kpis.hoesik} on={applied.hoesik} onToggle={flip("hoesik")} />
               </div>
-              <FlagKpi flag="local" ratio={a.kpis.local} on={applied.local} onToggle={flip("local")} />
-              <FlagKpi flag="hoesik" ratio={a.kpis.hoesik} on={applied.hoesik} onToggle={flip("hoesik")} />
-              <div className={s.kpi}>
-                <dt>가장 많은 1위 고객층</dt>
-                <dd>
-                  <span className={`${s.kpiValue} ${s.kpiValueText}`}>
-                    {top ? top.leaders.map(customerLabel).join(", ") : "정보 없음"}
-                  </span>
-                  <span className={s.kpiSub}>{top ? `1위인 매장 ${top.num}곳 / 고객층 확인 ${top.den}곳` : "고객층이 확인된 매장 0곳"}</span>
-                </dd>
-              </div>
-            </dl>
+            </div>
             {hasFlag(applied) ? (
               <p className={s.kpiResult} role="status">
                 <span>
@@ -502,85 +459,32 @@ export function AnalysisView({ dataset, scope, fellBack }: { dataset: AreaDatase
                 ))}
               </div>
               <section id="chart-peak" className={`${s.panel} ${s.chartPanel}`} data-active={tab === "peak"} aria-labelledby="peak-title">
-                <h2 id="peak-title" className={s.h2}>
-                  요일, 시간대별 대표 피크
-                </h2>
-                <p className={s.caption}>
-                  셀 숫자는 그 요일과 시간대가 대표 피크인 매장 수입니다. 대표 피크는 결제 데이터로 본 매장별 가장 붐비는 요일과 시간대이며, 지금의
-                  혼잡이나 대기 시간이 아닙니다.
-                </p>
+                <div className={s.titleRow}>
+                  <h2 id="peak-title" className={s.h2}>
+                    요일, 시간대별 대표 피크
+                  </h2>
+                  {peakHelp.button}
+                  {peakHelp.panel}
+                </div>
                 <PeakTable grid={a.peak} selected={applied.peak} onPick={pick("peak")} />
               </section>
 
               <section id="chart-cust" className={`${s.panel} ${s.chartPanel}`} data-active={tab === "cust"} aria-labelledby="cust-title">
-                <div className={s.panelHead}>
+                <div className={s.titleRow}>
                   <h2 id="cust-title" className={s.h2}>
-                    주 고객층
+                    손님 피라미드
                   </h2>
-                  <div className={s.seg} role="group" aria-label="주 고객층 보기">
-                    <button
-                      type="button"
-                      className={s.segBtn}
-                      data-testid="cust-mode"
-                      data-mode="rank"
-                      aria-pressed={custMode === "rank"}
-                      onClick={() => setCustMode("rank")}
-                    >
-                      1~3위 포함
-                    </button>
-                    <button
-                      type="button"
-                      className={s.segBtn}
-                      data-testid="cust-mode"
-                      data-mode="cat"
-                      aria-pressed={custMode === "cat"}
-                      onClick={() => setCustMode("cat")}
-                    >
-                      업종별 1위
-                    </button>
-                  </div>
+                  {pyrHelp.button}
+                  {pyrHelp.panel}
                 </div>
-                {custMode === "rank" ? (
-                  <>
-                    <p className={s.caption}>
-                      고객층 1~3위에 그 고객층이 들어간 매장 수입니다. 유효 표본 <span className={s.num}>{a.customers.sample}곳</span>. 1~3위를
-                      모두 세므로 한 매장을 막대 최대 3개에서 셉니다.
-                    </p>
-                    <BarChart name="cust" bars={a.customers.bars} selected={applied.cust} onPick={pick("cust")} label={customerLabel} />
-                  </>
-                ) : (
-                  <CategoryCustomerChart
-                    key={`${applied.cat ?? ""}|${applied.c1 ?? ""}`}
-                    rows={a.categoryCustomers}
-                    applied={applied}
-                    setFilters={setFilters}
-                  />
-                )}
+                <PyramidChart data={a.pyramid} selected={applied.c1} onPick={pickC1} onOpen={openReceipt} />
               </section>
 
               <section id="chart-cat" className={`${s.panel} ${s.chartPanel}`} data-active={tab === "cat"} aria-labelledby="cat-title">
                 <h2 id="cat-title" className={s.h2}>
                   업종별 매장 수
                 </h2>
-                <p className={s.caption}>막대를 누르면 지도, 목록, 지표, 다른 차트가 같이 바뀝니다. 다시 누르면 해제합니다.</p>
-                <BarChart
-                  name="cat"
-                  bars={a.categories}
-                  selected={applied.cat}
-                  onPick={pick("cat")}
-                  label={(k) => k}
-                  limit={CATEGORY_LIMIT}
-                  expanded={allCats}
-                  onExpand={() => setAllCats((v) => !v)}
-                  moreLabel={(n) => `그 밖 ${n}개 업종 펼치기`}
-                />
-              </section>
-
-              <section id="chart-rank" className={`${s.panel} ${s.chartPanel}`} data-active={tab === "rank"} aria-labelledby="rank-title">
-                <h2 id="rank-title" className={s.h2}>
-                  우리 동네와 전국 매출 순위 비교
-                </h2>
-                <Scatter stores={shown} selectedId={receiptId} onOpen={openReceipt} />
+                <Treemap bars={a.categories} selected={applied.cat} onPick={pick("cat")} />
               </section>
             </div>
 
@@ -633,7 +537,6 @@ export function AnalysisView({ dataset, scope, fellBack }: { dataset: AreaDatase
           </div>
         </>
       )}
-      <p className={s.footnote}>결제 데이터는 조회 지역에서 매출 상위 순으로 받은 매장 기준입니다.</p>
       {receiptStore ? <Receipt store={receiptStore} distance={null} distanceBasis={null} onClose={closeReceipt} /> : null}
     </div>
   );

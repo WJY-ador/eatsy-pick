@@ -4,7 +4,7 @@ import { AnalysisView } from "@/components/analysis/AnalysisView";
 import { AreaSwitch } from "@/components/analysis/AreaSwitch";
 import { type Scope, PAGE_INTRO, analysisPath, loadInput, pageTitle, parseScope, scopeName } from "@/components/analysis/scope";
 import s from "@/components/analysis/analysis.module.css";
-import { parseFilters, splitPeak } from "@/lib/analytics";
+import { c1Label, parseFilters, splitPeak } from "@/lib/analytics";
 import { customerLabel } from "@/lib/labels";
 import { SITE_NAME, shareImages, shareTwitterImages } from "@/lib/site";
 import { loadArea } from "@/lib/stores";
@@ -25,11 +25,11 @@ export async function generateMetadata({ searchParams }: PageProps<"/analysis">)
     parts.push(`${day} ${time} 피크`);
   }
   if (f.cust) parts.push(`고객층 1~3위에 ${customerLabel(f.cust)}`);
-  if (f.c1) parts.push(`1위 고객층 ${customerLabel(f.c1)}`);
+  if (f.c1) parts.push(`1위 고객층 ${c1Label(f.c1)}`);
   if (f.local) parts.push("동네맛집");
   if (f.hoesik) parts.push("회식 적합");
   const applied = parts.length > 0 ? ` ${parts.join(", ")} 조건을 적용했습니다.` : "";
-  const description = `${name}. ${PAGE_INTRO} 업종별 매장 분포, 대표 피크 요일과 시간대, 주 고객층, 우리 동네와 전국 매출 순위를 비교합니다.${applied}`;
+  const description = `${name}. ${PAGE_INTRO} 업종별 매장 수, 대표 피크 요일과 시간대, 1위 고객층의 연령대와 성별, 동네맛집과 회식 적합 비율을 보여 줍니다.${applied}`;
   // 공유 미리보기(og, twitter) 문구. 제목은 화면 제목과 같고, 설명은 소개 문장에 원본 값으로 보는 항목과 적용 조건을 붙인다.
   const shareTitle = title;
   const shareDescription = `${PAGE_INTRO} 대표 피크 요일과 시간대, 1위 고객층, 동네맛집 표시 매장 수를 비교합니다.${applied}`;

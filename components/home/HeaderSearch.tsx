@@ -94,11 +94,14 @@ export function ExploreLinkBase({ href = "/analysis" }: { href?: string }) {
 /**
  * 홈에서는 지금 보고 있는 지역(area 또는 loc), 음식 조건(업종), 프랜차이즈 제외 설정을 /analysis로 넘긴다.
  * 주소 꼴은 브리핑 링크와 같다(analysisHref). 좌표와 매장 이름 검색어는 넘기지 않는다. 다른 화면에서는 /analysis.
+ * 범위 없는 가게 이름 검색(지역으로 풀리지 않은 q)은 보는 지역이 없어 기본 상권 대신 지역 없는 /analysis로 보낸다.
+ * 지역으로 풀린 낱말은 주소가 loc + q라 그 지역으로 간다.
  */
 export function ExploreLink() {
   const path = usePathname();
   const sp = useSearchParams();
   if (path !== "/") return <ExploreLinkBase />;
   const h = parseHome(Object.fromEntries(sp.entries()));
+  if (h.isDefault && h.q) return <ExploreLinkBase />;
   return <ExploreLinkBase href={analysisHref(h.scope, h.food, h.excludeFranchise)} />;
 }

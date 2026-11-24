@@ -8,7 +8,7 @@ import { CATEGORY_IMAGES, NEUTRAL_KEYS, type ImageKey, pickImage } from "@/lib/c
  * 카드 위 16:9 업종 참고 이미지. 상자 높이는 aspect-ratio로 고정해 로드 전, 후, 실패에 같다.
  * 사진은 메뉴 → 업종 소분류 → 넓은 업종 → 중립 실사 순서로 고른다(lib/category-image.ts pickImage). name이 없으면 업종 값만 본다.
  * 고른 파일을 못 불러오면 로컬 중립 실사로 바꾼다(data-kind="fallback"). 중립 실사도 못 불러오면 다음 중립 실사로 넘기고, 다 실패하면 바탕색 상자로 둔다.
- * 실제 매장 사진으로 읽히지 않게 언제나 업종 참고 이미지 표시를 얹는다.
+ * 이미지 위에는 표시를 얹지 않는다. 실제 매장 사진이 아니라는 안내는 첫 큐레이션 섹션 머리에 한 줄로 둔다(Curation.tsx). 화면 낭독기는 alt로 참고 이미지임을 읽는다.
  */
 export function CategoryImage({
   category,
@@ -61,9 +61,6 @@ export function CategoryImage({
           }}
         />
       ) : null}
-      <span className="catimg__note" aria-hidden="true">
-        업종 참고 이미지
-      </span>
     </div>
   );
 }

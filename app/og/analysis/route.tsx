@@ -3,7 +3,7 @@ import path from "node:path";
 import { ImageResponse } from "next/og";
 import type { NextRequest } from "next/server";
 import { PAGE_INTRO, foodLabel, loadInput, pageTitle, parseScope, scopeName } from "@/components/analysis/scope";
-import { type Analysis, type Ratio, analyze, parseFilters, ratioPercent, splitPeak } from "@/lib/analytics";
+import { type Analysis, type Ratio, analyze, c1Label, parseFilters, ratioPercent, splitPeak } from "@/lib/analytics";
 import { customerLabel } from "@/lib/labels";
 import { OG_COLORS as C } from "@/lib/og-theme";
 import { ATTRIBUTION, SITE_NAME } from "@/lib/site";
@@ -94,7 +94,7 @@ function AnalysisCard({ title, scopeLabel, food, a }: { title: string; scopeLabe
     parts.push(`${day} ${time} 피크`);
   }
   if (f.cust) parts.push(`고객층 1~3위에 ${customerLabel(f.cust)}`);
-  if (f.c1) parts.push(`1위 고객층 ${customerLabel(f.c1)}`);
+  if (f.c1) parts.push(`1위 고객층 ${c1Label(f.c1)}`);
   parts.push(f.fr ? "프랜차이즈 제외" : "프랜차이즈 포함");
   const local = ratioText(a.kpis.local);
   const hoesik = ratioText(a.kpis.hoesik);
