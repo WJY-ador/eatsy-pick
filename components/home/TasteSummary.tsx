@@ -1,6 +1,7 @@
 "use client";
 
 import "@/app/feed.css";
+import "@/app/hometop.css";
 import { useMemo, useSyncExternalStore } from "react";
 import { tasteSummary } from "@/lib/taste";
 import { openSaves } from "@/lib/ui-state";
@@ -32,7 +33,7 @@ function Chevron() {
 /**
  * 홈의 내 저장 요약. 1024px 이상은 결제 브리핑 옆 칸, 그 아래 폭은 브리핑 바로 아래 한 줄이다.
  * 단계별 수를 누르면 내 저장이 그 단계 필터로 열린다. 저장 패턴은 내가 저장한 매장의 BC카드 특성이다(개인 결제 내역이 아니다).
- * 기기 저장 데이터라 서버 렌더에는 같은 크기의 빈 칸만 둔다. 칸의 높이는 CSS가 고정해 붙을 때 화면이 뛰지 않는다.
+ * 기기 저장 데이터라 서버 렌더에는 빈 칸만 둔다. 모바일은 한 줄 높이로 고정하고, 1024px 이상은 내용 높이만큼만 차지한다(hometop.css).
  */
 export function TasteSummary() {
   const hydrated = useHydrated();

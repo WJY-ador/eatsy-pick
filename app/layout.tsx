@@ -4,7 +4,7 @@ import "./globals.css";
 import { InappBanner } from "@/components/InappBanner";
 import { RecordsSheet } from "@/components/Records";
 import { SiteFooter, SiteHeader } from "@/components/SiteChrome";
-import { SITE_DESCRIPTION, SITE_NAME, siteUrl } from "@/lib/site";
+import { SITE_DESCRIPTION, SITE_NAME, shareImages, shareTwitterImages, siteUrl } from "@/lib/site";
 
 // 서체는 Pretendard Variable 한 가족(dynamic subset CSS). 숫자는 tabular-nums로 맞춘다.
 
@@ -16,9 +16,9 @@ export const metadata: Metadata = {
     type: "website",
     locale: "ko_KR",
     siteName: SITE_NAME,
-    images: [{ url: "/og", width: 1200, height: 630, alt: SITE_NAME }],
+    images: shareImages(SITE_NAME),
   },
-  twitter: { card: "summary_large_image", images: ["/og"] },
+  twitter: { card: "summary_large_image", images: shareTwitterImages(SITE_NAME) },
 };
 
 export const viewport: Viewport = {

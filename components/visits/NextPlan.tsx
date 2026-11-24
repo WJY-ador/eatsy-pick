@@ -220,7 +220,7 @@ export function NextPlan({
           BC카드 결제 근거
         </h3>
         {plan.fresh.length === 0 ? (
-          <p className={s.note}>조건에 맞는 새 후보가 없습니다.</p>
+          <p className={s.note}>조건에 맞는 새 가게가 없습니다.</p>
         ) : (
           <ul className={s.items}>
             {plan.fresh.map((f) => (

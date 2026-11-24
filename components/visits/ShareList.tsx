@@ -164,7 +164,7 @@ export function ShareList({ records }: { records: VisitRecord[] }) {
               type="text"
               value={title}
               maxLength={SHARE_TITLE_MAX}
-              placeholder="예: 금요일 팀 회식 후보"
+              placeholder="예: 금요일 팀 회식"
               onChange={(e) => {
                 setNote(null);
                 setTitle(e.target.value);

@@ -1,5 +1,6 @@
 "use client";
 
+import "@/app/hometop.css";
 import { NavLink } from "@/components/NavLink";
 import type { Briefing as BriefingData } from "@/lib/briefing";
 
@@ -16,7 +17,7 @@ export function Briefing({
   analysisHref,
 }: {
   region: string;
-  /** 조건 없는 첫 진입의 예시 지역 */
+  /** 조건 없는 첫 진입의 예시 지역. 참이면 지역 이름 옆에 예시 배지를 단다 */
   example: boolean;
   data: BriefingData;
   exclude: boolean;
@@ -29,10 +30,13 @@ export function Briefing({
     <section className="brief" data-testid="briefing" aria-labelledby="brief-h">
       <div className="brief__body">
         <h2 id="brief-h" className="brief__k">
-          이 동네 결제 브리핑{example ? <span className="brief__ex">예시 지역</span> : null}
+          이 동네 결제 브리핑
         </h2>
         <p className="brief__main">
-          <strong className="brief__region">{region}</strong>
+          <span className="brief__where">
+            <strong className="brief__region">{region}</strong>
+            {example ? <span className="brief__ex">예시</span> : null}
+          </span>
           <span>
             분석 대상 <strong className="num">{data.analyzed}곳</strong>
             {exclude ? <span className="brief__scope">, 프랜차이즈 제외</span> : null}
@@ -53,7 +57,7 @@ export function Briefing({
         {mapNote ? <p className="brief__note">{mapNote}</p> : null}
       </div>
       <NavLink href={analysisHref} className="brief__go">
-        상권 분석 자세히 보기
+        이 동네 맛집 한눈에 보기
         <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false">
           <path d="m9 6 6 6-6 6" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
         </svg>

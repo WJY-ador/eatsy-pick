@@ -16,6 +16,7 @@ export const REGION_CHIPS: { slug: string; label: string }[] = [
 
 /**
  * 지역 줄. 프리셋은 평범한 링크라 스크립트 없이도 간다(서버 조회). 내 주변은 위치를 묻는 버튼이다.
+ * onMap이 있으면 줄 끝에 지도 보기 버튼을 둔다(지역 묶음 밖, 가로로 넘기는 칩 줄 밖). 지도 섹션이 그려질 때만 넘긴다.
  */
 export function RegionChips({
   activeSlug,
@@ -23,16 +24,19 @@ export function RegionChips({
   locating,
   hrefFor,
   onNear,
+  onMap,
 }: {
   activeSlug: string | null;
   near: boolean;
   locating: boolean;
   hrefFor: (slug: string) => string;
   onNear: () => void;
+  /** 지도 섹션으로 바로 간다. 없으면 버튼을 그리지 않는다 */
+  onMap?: () => void;
 }) {
   return (
-    <div className="chips" role="group" aria-label="지역">
-      <div className="chips__row" id="region-chips">
+    <div className={onMap ? "chips chips--region" : "chips"}>
+      <div className="chips__row" id="region-chips" role="group" aria-label="지역">
         <button
           type="button"
           className="chip chip--near"
@@ -54,6 +58,14 @@ export function RegionChips({
           </NavLink>
         ))}
       </div>
+      {onMap ? (
+        <button type="button" className="mapjump" data-testid="map-jump" onClick={onMap}>
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false">
+            <path d="M9 4 3 6.5v13.5l6-2.5 6 2.5 6-2.5V4l-6 2.5L9 4Zm0 0v13.5m6-11v13.5" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinejoin="round" />
+          </svg>
+          지도 보기
+        </button>
+      ) : null}
     </div>
   );
 }

@@ -1,8 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 import { setNavPending } from "@/components/NavLink";
+import { analysisHref, parseHome } from "@/lib/home-params";
 
 export const SEARCH_PLACEHOLDER = "동네, 역, 음식점 검색";
 const Q_MAX = 40;
@@ -76,4 +78,27 @@ export function HeaderSearch() {
   const q = path === "/" ? (sp.get("q") ?? "") : "";
   // 주소의 검색어가 바뀌면 칸을 새로 채운다.
   return <SearchForm key={q} initial={q} />;
+}
+
+export const EXPLORE_LABEL = "맛집 둘러보기";
+
+/** 머리말의 맛집 둘러보기 링크. 스크립트 전과 Suspense 대기 중에는 기본 주소(/analysis)다 */
+export function ExploreLinkBase({ href = "/analysis" }: { href?: string }) {
+  return (
+    <Link className="top__link" prefetch={false} href={href} data-testid="explore-link">
+      {EXPLORE_LABEL}
+    </Link>
+  );
+}
+
+/**
+ * 홈에서는 지금 보고 있는 지역(area 또는 loc), 음식 조건(업종), 프랜차이즈 제외 설정을 /analysis로 넘긴다.
+ * 주소 꼴은 브리핑 링크와 같다(analysisHref). 좌표와 매장 이름 검색어는 넘기지 않는다. 다른 화면에서는 /analysis.
+ */
+export function ExploreLink() {
+  const path = usePathname();
+  const sp = useSearchParams();
+  if (path !== "/") return <ExploreLinkBase />;
+  const h = parseHome(Object.fromEntries(sp.entries()));
+  return <ExploreLinkBase href={analysisHref(h.scope, h.food, h.excludeFranchise)} />;
 }

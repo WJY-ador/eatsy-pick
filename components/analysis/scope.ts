@@ -2,6 +2,7 @@
 
 import { type Filters, filterEntries } from "@/lib/analytics";
 import { areaBySlug } from "@/lib/areas";
+import { foodDisplayName } from "@/lib/food";
 
 export const DEFAULT_AREA = "gangnam";
 const LOC_MAX = 30;
@@ -43,6 +44,20 @@ export function parseScope(raw: RawParams): { scope: Scope; fellBack: boolean } 
 export function scopeName(scope: Scope): string {
   return scope.kind === "area" ? scope.name : scope.loc;
 }
+
+/** 화면에 쓰는 조회 음식 이름(예 고기구이 → "고기/육류"). 조회 값(food)은 그대로 둔다. 없으면 null */
+export function foodLabel(scope: Scope): string | null {
+  return scope.food ? foodDisplayName(scope.food) : null;
+}
+
+/** 페이지 제목: "{조회 지역} {음식 화면 이름 }맛집 한눈에". 예 "동래역 고기/육류 맛집 한눈에" */
+export function pageTitle(place: string, scope: Scope): string {
+  const food = foodLabel(scope);
+  return `${place} ${food ? `${food} ` : ""}맛집 한눈에`;
+}
+
+/** 페이지 소개 문장 */
+export const PAGE_INTRO = "동네 가게를 카드 결제 데이터로 비교해 보세요.";
 
 export function loadInput(scope: Scope): { area?: string; loc?: string; category?: string } {
   const place = scope.kind === "area" ? { area: scope.slug } : { loc: scope.loc };

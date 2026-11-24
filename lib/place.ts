@@ -4,6 +4,7 @@
 // Next 전용 API를 import하지 않는다(일반 Node에서는 fetch의 next 옵션이 무시된다).
 
 import type { PlaceHit } from "./home-data";
+import { METRO, shortSido, unitOf } from "./my-areas";
 
 const ENDPOINT = "https://dapi.kakao.com/v2/local/search/keyword.json";
 const CATEGORY_ENDPOINT = "https://dapi.kakao.com/v2/local/search/category.json";
@@ -143,4 +144,147 @@ export async function regionForWord(word: string): Promise<string | null> {
   const picked = asWord ? pickPlace(asWord, w, false) : null;
   if (!picked || SHOP.has(picked.category) || !picked.hit.name.startsWith(w)) return null;
   return picked.category === SUBWAY || picked.category === ATTRACTION || picked.hit.name === w ? w : null;
+}
+
+// ---------- 지역 후보(상권 랭킹의 지역 추가, 지역 변경) ----------
+// 지역 추가 검색은 입력을 항상 지역으로 읽는다(가게 이름으로 읽지 않는다). 역은 지하철역(SW8)만,
+// 구와 동은 카카오 주소 검색의 지역(REGION) 결과 중 법정동 코드가 있는 것만 받는다(잇플 주소는 법정동이다).
+
+const ADDRESS_ENDPOINT = "https://dapi.kakao.com/v2/local/search/address.json";
+
+type KakaoAddressDoc = {
+  address_name?: string;
+  address_type?: string;
+  x?: string;
+  y?: string;
+  address?: { region_1depth_name?: string; region_2depth_name?: string; region_3depth_name?: string; b_code?: string } | null;
+};
+
+/** 지역 후보 하나(서버 전용 값 포함). 화면용 후보는 lib/my-areas.ts AreaCandidate */
+export type RegionPlace = {
+  key: string;
+  kind: "station" | "region";
+  level: "station" | "sido" | "gu" | "dong";
+  /** 화면 꼬리표(역, 시, 도, 구, 군, 동, 읍, 면) */
+  unit: string;
+  name: string;
+  /** 짧은 시도 이름 */
+  sido: string;
+  /** 카카오 주소(시도 포함) */
+  address: string;
+  lat: number;
+  lng: number;
+  /** 역: 역의 주소 범위(해운대구 우동). 구, 동: 잇플 조회 location(대구 중구, 제주시 연동) */
+  range: string;
+  /** 시군구(주소 둘째 토큰, 잇플 주소의 시군구 필터와 맞춘다). 빈 문자열이면 시군구로 거르지 않는다(세종) */
+  sigungu: string;
+  /** 같은 후보를 다시 찾는 검색어(주소에 싣는다) */
+  q: string;
+};
+
+function coord(d: { x?: string; y?: string }): { lat: number; lng: number } | null {
+  const lat = Number(d.y);
+  const lng = Number(d.x);
+  return Number.isFinite(lat) && Number.isFinite(lng) && lat !== 0 && lng !== 0 ? { lat, lng } : null;
+}
+
+function regionOf(d: KakaoAddressDoc): RegionPlace | null {
+  const a = d.address;
+  const at = coord(d);
+  if (d.address_type !== "REGION" || !a || !a.b_code || !a.region_1depth_name || !at) return null;
+  const rawSido = a.region_1depth_name.trim();
+  const sido = shortSido(rawSido);
+  const gu = (a.region_2depth_name ?? "").trim();
+  const dong = (a.region_3depth_name ?? "").trim();
+  const address = (d.address_name ?? "").trim();
+  const base = { kind: "region" as const, sido, address, ...at, q: address };
+  if (dong) {
+    // 시군구가 없는 시도(세종)의 동은 시도를 붙여 조회하고 시군구로 거르지 않는다(가맹점 주소 둘째 토큰이 도로명이다).
+    const range = gu ? addressRange(address) : `${sido} ${dong}`;
+    if (!range) return null;
+    const key = gu ? `region:${sido} ${gu} ${dong}` : `region:${sido} ${dong}`;
+    return { ...base, key, level: "dong", unit: unitOf("dong", dong), name: dong, range, sigungu: gu.split(/\s+/)[0] ?? "" };
+  }
+  if (gu) {
+    // 구 이름이 겹치는 특별시, 광역시는 시도를 붙여 조회한다(2026-11-24 실측: 중구 100건 중 대구 14건, 대구 중구 100건 모두 대구).
+    // 도 단위 시군은 붙이지 않는다(가맹점 주소의 도 표기가 섞여 있다). 동명 시군(고성군)은 결과를 시도로 거른다.
+    const range = METRO.has(sido) ? `${sido} ${gu}` : gu;
+    return { ...base, key: `region:${sido} ${gu}`, level: "gu", unit: unitOf("gu", gu), name: `${sido} ${gu}`, range, sigungu: gu.split(/\s+/)[0] };
+  }
+  // 시도 전체(세종처럼 시군구가 없는 시도). 시도 이름으로 조회하고 시도로 거른다.
+  return { ...base, key: `region:${sido}`, level: "sido", unit: unitOf("sido", sido, rawSido), name: sido, range: sido, sigungu: "" };
+}
+
+/** 주소 둘째 토큰이 시군구인가(세종 주소는 바로 동이나 도로명이 온다) */
+function hasSigungu(address: string): boolean {
+  return /(시|군|구)$/.test(address.trim().split(/\s+/)[1] ?? "");
+}
+
+function stationOf(d: KakaoDoc, query: string): RegionPlace | null {
+  const at = coord(d);
+  const address = (d.address_name ?? "").trim();
+  const range = addressRange(address);
+  if (!at || !range) return null;
+  const isSubway = d.category_group_code === SUBWAY;
+  // 분류 코드가 없는 기차역(전주역)은 이름이 검색어 마지막 낱말과 같을 때만 받는다.
+  const last = query.trim().split(/\s+/).pop() ?? "";
+  if (!isSubway && !((d.category_group_code ?? "") === "" && /역$/.test(last) && (d.place_name ?? "").trim() === last)) return null;
+  const name = placeName(d);
+  const sido = shortSido(address.split(/\s+/)[0] ?? "");
+  return {
+    key: `station:${sido} ${range} ${name}`,
+    kind: "station",
+    level: "station",
+    unit: "역",
+    name,
+    sido,
+    address,
+    ...at,
+    range,
+    sigungu: hasSigungu(address) ? range.split(/\s+/)[0] : "",
+    q: `${sido} ${name}`,
+  };
+}
+
+/**
+ * 지역 후보 검색. 카카오 주소 검색(구, 동)과 키워드 검색(역) 2건을 부른다. 키가 없거나 둘 다 실패하면 null, 결과 없음은 빈 배열.
+ * 같은 키는 하나로 합친다(같은 역의 노선별 결과). 순서: 역, 구, 동(카카오 순서 유지).
+ */
+export async function searchRegionPlaces(query: string): Promise<RegionPlace[] | null> {
+  const key = process.env.KAKAO_REST_KEY;
+  const q = query.replace(/\s+/g, " ").trim();
+  if (!key || !q) return null;
+  const [addr, kw] = await Promise.all([
+    kakao(`${ADDRESS_ENDPOINT}?${new URLSearchParams({ query: q, size: "10" }).toString()}`, key) as Promise<KakaoAddressDoc[] | null>,
+    kakao(keywordUrl(q), key),
+  ]);
+  if (!addr && !kw) return null;
+  const out = new Map<string, RegionPlace>();
+  for (const d of kw ?? []) {
+    const p = stationOf(d, q);
+    if (p && !out.has(p.key)) out.set(p.key, p);
+  }
+  for (const d of addr ?? []) {
+    const p = regionOf(d);
+    if (p && !out.has(p.key)) out.set(p.key, p);
+  }
+  return [...out.values()];
+}
+
+/** 기준점 둘레 음식점 주소로 주소 범위 목록을 만든다(findPlace와 같은 규칙, 기준점을 이미 고른 경우). 실패하면 기준점의 범위 하나 */
+export async function rangesAround(at: { lat: number; lng: number }, first: string): Promise<string[]> {
+  const key = process.env.KAKAO_REST_KEY;
+  if (!key) return [first];
+  const near = await kakao(
+    `${CATEGORY_ENDPOINT}?${new URLSearchParams({
+      category_group_code: RESTAURANT,
+      x: String(at.lng),
+      y: String(at.lat),
+      radius: String(NEAR_RADIUS_M),
+      sort: "distance",
+      size: "15",
+    }).toString()}`,
+    key,
+  );
+  return rangesNear(first, near ?? []);
 }

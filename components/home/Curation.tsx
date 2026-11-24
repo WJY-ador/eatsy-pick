@@ -35,15 +35,13 @@ function Arrow({ dir }: { dir: "prev" | "next" }) {
 /**
  * 큐레이션 한 섹션. 모바일은 다음 카드 일부가 보이는 가로 스와이프, PC는 3~4열 묶음과 넘김 버튼.
  * 어떤 카드를 싣는지는 부모가 정한다(화면 폭과 무관). 열 수는 넘김 버튼에만 쓴다.
- * 제목 옆 수는 실은 카드 수다. 조건에 맞는 전체 수가 더 크면 아래 안내 한 줄로 어디서 보는지 적는다.
+ * 제목 옆 수는 실은 카드 수다. 앞 섹션과 겹쳐 뺀 수나 남은 수를 알리는 안내 줄은 두지 않는다.
  */
 export function Curation({
   theme,
   title,
   sub,
   stores,
-  total,
-  shownElsewhere = 0,
   distanceOf,
   onOpen,
   activeId,
@@ -56,9 +54,9 @@ export function Curation({
   sub: string;
   /** 이 섹션에 배정한 카드(최대 CURATION_MAX) */
   stores: Store[];
-  /** 이 조건에 맞는 전체 수 */
-  total: number;
-  /** 조건에 맞지만 앞 섹션에 이미 실려 여기서 뺀 수(전체 테마의 중복 제거) */
+  /** 이 조건에 맞는 전체 수. 화면에 쓰지 않는다(부르는 쪽 호환용) */
+  total?: number;
+  /** 앞 섹션에 이미 실려 여기서 뺀 수. 화면에 쓰지 않는다(부르는 쪽 호환용) */
   shownElsewhere?: number;
   distanceOf: (s: Store) => number | null;
   onOpen: (s: Store, trigger: HTMLElement) => void;
@@ -106,13 +104,6 @@ export function Curation({
           </li>
         ))}
       </ul>
-      {total > stores.length ? (
-        <p className="cur__more">
-          {shownElsewhere > 0
-            ? `조건에 맞는 ${total}곳 중 위 섹션에 나온 ${shownElsewhere}곳은 빼고 실었습니다. 전체는 아래 지도와 전체 매장에서 볼 수 있습니다.`
-            : `나머지 ${total - stores.length}곳은 아래 지도와 전체 매장에서 볼 수 있습니다.`}
-        </p>
-      ) : null}
     </section>
   );
 }

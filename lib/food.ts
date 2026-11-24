@@ -28,3 +28,17 @@ export function foodCategory(input: string): string | null {
   const key = input.replace(/\s+/g, "");
   return BY_WORD.get(key) ?? null;
 }
+
+/** 화면에 쓰는 음식 분류 이름. API 조회 업종 값과 매장 원본 업종은 그대로 두고 조회 조건 이름만 바꾼다.
+ *  예외 표에 있으면 그 값, 없으면 업종 이름을 그대로 쓴다(찜/탕/찌개 → "찜/탕/찌개").
+ *  업종 이름처럼 "/"로 나누므로 제목의 테마 쉼표("강남역 찜/탕/찌개 맛집, 회식 적합")와 겹치지 않는다 */
+const DISPLAY: Record<string, string> = {
+  고기구이: "고기/육류",
+  횟집: "회",
+  기타중식: "중식",
+  일식돈가스: "돈가스",
+  "곱창전골/구이": "곱창",
+};
+export function foodDisplayName(category: string): string {
+  return DISPLAY[category] ?? category;
+}

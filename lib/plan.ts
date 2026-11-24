@@ -107,8 +107,8 @@ function revisitReason(r: VisitRecord, occasion: Occasion | null): string {
 function freshReason(s: Store, occasion: Occasion | null, here: { lat: number; lng: number } | null): string {
   const head =
     here && s.lat !== null && s.lng !== null
-      ? `${distanceText(distanceMeters(here, { lat: s.lat, lng: s.lng }))} 거리의 새 후보`
-      : "근처의 새 후보";
+      ? `${distanceText(distanceMeters(here, { lat: s.lat, lng: s.lng }))} 거리의 새 가게`
+      : "근처의 새 가게";
   let basis: string | null = null;
   if (occasion && HOESIK_FIRST.includes(occasion) && s.hoesik === true) basis = "회식 적합 표시 있음";
   else if (s.ccgRank !== null) basis = `${s.sigungu} 매출 상위 ${pctLabel(s.ccgRank)}`;

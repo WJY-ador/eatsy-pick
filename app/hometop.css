@@ -1,0 +1,13 @@
+/* Home top: payment briefing and my-saves summary. Loaded after feed.css by Briefing and TasteSummary; selectors carry extra weight so order does not matter. */
+
+/* Example badge sits next to the default region name only */
+.brief__where { display: inline-flex; flex-wrap: wrap; align-items: center; column-gap: var(--space-xs); min-width: 0; }
+.brief__where .brief__ex { flex-shrink: 0; line-height: 1.5; }
+
+/* From 1024px the two boxes sit side by side at their own content height: no stretched row, no fixed minimum height.
+   Before the device data arrives the summary box is an empty placeholder; hide its frame so no blank bordered box flashes. */
+@media (min-width: 64rem) {
+  .feed__top.feed__top { align-items: start; }
+  .feed__top > .taste { min-height: 0; }
+  .feed__top > .taste[aria-hidden="true"] { visibility: hidden; }
+}

@@ -2,34 +2,37 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { AnalysisView } from "@/components/analysis/AnalysisView";
 import { AreaSwitch } from "@/components/analysis/AreaSwitch";
-import { type Scope, analysisPath, loadInput, ogPath, parseScope, scopeName } from "@/components/analysis/scope";
+import { type Scope, PAGE_INTRO, analysisPath, loadInput, pageTitle, parseScope, scopeName } from "@/components/analysis/scope";
 import s from "@/components/analysis/analysis.module.css";
 import { parseFilters, splitPeak } from "@/lib/analytics";
-import { SITE_NAME, siteUrl } from "@/lib/site";
+import { customerLabel } from "@/lib/labels";
+import { SITE_NAME, shareImages, shareTwitterImages } from "@/lib/site";
 import { loadArea } from "@/lib/stores";
 
 export const maxDuration = 30;
 
-// 메타데이터는 API를 부르지 않는다. 상권 이름은 프리셋이나 loc 값에서 바로 나온다.
+// 메타데이터는 API를 부르지 않는다. 지역 이름은 프리셋이나 loc 값에서 바로 나온다(화면 제목은 조회 결과의 지역 이름을 쓴다).
 export async function generateMetadata({ searchParams }: PageProps<"/analysis">): Promise<Metadata> {
   const raw = await searchParams;
   const { scope } = parseScope(raw);
   const f = parseFilters(raw);
-  const name = scope.food ? `${scopeName(scope)} ${scope.food}` : scopeName(scope);
-  const title = `${name} 상권 분석 | ${SITE_NAME}`;
+  const name = pageTitle(scopeName(scope), scope);
+  const title = `${name} | ${SITE_NAME}`;
   const parts: string[] = [];
   if (f.cat) parts.push(f.cat);
   if (f.peak) {
     const { day, time } = splitPeak(f.peak);
     parts.push(`${day} ${time} 피크`);
   }
-  if (f.cust) parts.push(f.cust);
+  if (f.cust) parts.push(`고객층 1~3위에 ${customerLabel(f.cust)}`);
+  if (f.c1) parts.push(`1위 고객층 ${customerLabel(f.c1)}`);
   if (f.local) parts.push("동네맛집");
   if (f.hoesik) parts.push("회식 적합");
-  const description = `${scopeName(scope)}${scope.food ? ` ${scope.food}` : ""} 상권을 BC카드 결제 데이터로 살펴보세요. 업종별 매장 분포, 대표 피크 요일과 시간대, 주 고객층을 비교합니다.${
-    parts.length > 0 ? ` ${parts.join(", ")} 조건을 적용했습니다.` : ""
-  }`;
-  const og = new URL(ogPath(scope, f), siteUrl()).href;
+  const applied = parts.length > 0 ? ` ${parts.join(", ")} 조건을 적용했습니다.` : "";
+  const description = `${name}. ${PAGE_INTRO} 업종별 매장 분포, 대표 피크 요일과 시간대, 주 고객층, 우리 동네와 전국 매출 순위를 비교합니다.${applied}`;
+  // 공유 미리보기(og, twitter) 문구. 제목은 화면 제목과 같고, 설명은 소개 문장에 원본 값으로 보는 항목과 적용 조건을 붙인다.
+  const shareTitle = title;
+  const shareDescription = `${PAGE_INTRO} 대표 피크 요일과 시간대, 1위 고객층, 동네맛집 표시 매장 수를 비교합니다.${applied}`;
   return {
     title: { absolute: title },
     description,
@@ -38,12 +41,12 @@ export async function generateMetadata({ searchParams }: PageProps<"/analysis">)
       type: "website",
       locale: "ko_KR",
       siteName: SITE_NAME,
-      title,
-      description,
+      title: shareTitle,
+      description: shareDescription,
       url: analysisPath(scope, f),
-      images: [{ url: og, width: 1200, height: 630, alt: `${name} 상권 분석` }],
+      images: shareImages(title),
     },
-    twitter: { card: "summary_large_image", title, description, images: [og] },
+    twitter: { card: "summary_large_image", title: shareTitle, description: shareDescription, images: shareTwitterImages(title) },
   };
 }
 

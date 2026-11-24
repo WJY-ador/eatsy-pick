@@ -1,11 +1,11 @@
 import Link from "next/link";
 import { Suspense } from "react";
-import { HeaderSearch, SearchForm } from "@/components/home/HeaderSearch";
+import { ExploreLink, ExploreLinkBase, HeaderSearch, SearchForm } from "@/components/home/HeaderSearch";
 import { GEOCODE_CREDIT, NOMINATIM_ON } from "@/lib/geocode";
 import { ATTRIBUTION, DATA_SOURCE, DISCLAIMER, SITE_NAME } from "@/lib/site";
 import { RecordsButton } from "./Records";
 
-/** 모든 화면의 상단 고정 바: 로고, 통합 검색, 내 저장, 상권 랭킹 */
+/** 모든 화면의 상단 고정 바: 로고, 통합 검색, 맛집 둘러보기, 내 저장, 상권 랭킹 */
 export function SiteHeader() {
   return (
     <header className="top">
@@ -19,6 +19,9 @@ export function SiteHeader() {
           </Suspense>
         </div>
         <nav className="top__nav" aria-label="주요 화면">
+          <Suspense fallback={<ExploreLinkBase />}>
+            <ExploreLink />
+          </Suspense>
           <RecordsButton />
           <Link className="top__link" prefetch={false} href="/area">
             상권 랭킹

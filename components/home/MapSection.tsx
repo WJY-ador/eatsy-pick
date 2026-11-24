@@ -1,13 +1,19 @@
 "use client";
 
 import "@/app/mapsection.css";
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { type Ref, useCallback, useEffect, useId, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { StoreMap } from "@/components/StoreMap";
 import { distanceM } from "@/lib/store-view";
 import type { Store } from "@/lib/stores";
 import { StoreCard } from "./StoreCard";
 
 type Point = { lat: number; lng: number };
+
+/** 홈의 지도 보기 버튼이 부르는 동작 */
+export type MapSectionHandle = {
+  /** 지금 조건 그대로 지도 섹션을 고정 머리말 바로 아래로 올리고 제목에 포커스를 둔다. 768px 미만은 지도 크게 보기도 켠다. 주소는 바꾸지 않는다 */
+  reveal: () => void;
+};
 
 export type MapSectionProps = {
   /** 지역, 프랜차이즈, 테마를 적용한 뒤의 후보(큐레이션과 같은 집합) */
@@ -28,6 +34,7 @@ export type MapSectionProps = {
   onOpen: (store: Store, trigger: HTMLElement | null) => void;
   sort: "near" | "rank";
   onSort: (s: "near" | "rank") => void;
+  ref?: Ref<MapSectionHandle>;
 };
 
 /** 우선 이름 라벨을 붙여 보는 매장 수(매출 상위 순). 겹치면 끈다 */
@@ -59,14 +66,30 @@ function stickyBottom(): number {
 }
 
 /**
+ * 스크롤한 뒤 고정 머리말이 가릴 높이. stickyBottom과 달리 지금 붙어 있지 않은 머리말도 센다
+ * (페이지 맨 위에서는 인앱 안내가 상단 바를 아래로 밀어 r.top > 1이다. 스크롤하면 상단 바는 top 값 자리에 붙는다).
+ */
+function stuckHeight(): number {
+  let bottom = 0;
+  for (const el of document.querySelectorAll("header, .inapp")) {
+    const cs = getComputedStyle(el);
+    if (cs.position !== "sticky" && cs.position !== "fixed") continue;
+    const top = Number.parseFloat(cs.top);
+    bottom = Math.max(bottom, (Number.isFinite(top) ? top : 0) + el.getBoundingClientRect().height);
+  }
+  return Math.round(bottom);
+}
+
+/**
  * 지도와 전체 매장. 768px 이상은 왼쪽 목록 40%, 오른쪽 지도 60%. 768px 미만은 지도 아래 세로 목록이고, 지도 크게 보기로 넓힌다.
  * 지도 인스턴스는 하나다. 지도 크게 보기는 data-expanded와 CSS만 바꾸므로 조건, 선택, 지도 위치가 그대로 남는다.
  * 지도 이동, 확대, 묶음 풀기, 정렬은 서버를 부르지 않는다(정렬 주소 반영은 onSort를 받은 쪽이 history로 한다).
  */
-export function MapSection({ stores, origin, originLabel, focus, me, near, locateState, onLocate, selectedId, onOpen, sort, onSort }: MapSectionProps) {
+export function MapSection({ stores, origin, originLabel, focus, me, near, locateState, onLocate, selectedId, onOpen, sort, onSort, ref }: MapSectionProps) {
   const headId = useId();
   const listId = useId();
   const sectionRef = useRef<HTMLElement>(null);
+  const titleRef = useRef<HTMLHeadingElement>(null);
   const listRef = useRef<HTMLOListElement>(null);
   const [hoverId, setHoverId] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
@@ -125,6 +148,43 @@ export function MapSection({ stores, origin, originLabel, focus, me, near, locat
   };
 
   const count = rows.length;
+
+  // 지도 보기(홈 지역 줄): 지도 인스턴스, 조건, 선택, 정렬은 그대로 두고 자리만 옮긴다. 주소 기록을 남기지 않으려고 해시 대신 스크롤한다.
+  // html의 scroll-padding-top(96px)이 scrollIntoView에 더해지므로, 지도 크게 보기와 같이 고정 머리말 높이로 직접 계산한다.
+  // 부드러운 스크롤 중에 위쪽 높이가 바뀌면(추천 섹션이 늦게 끼어드는 경우 등) 멈춘 뒤 한 번 바로잡는다. 그 사이 사용자가 스크롤하면 바로잡지 않는다.
+  useImperativeHandle(
+    ref,
+    () => ({
+      reveal: () => {
+        const sec = sectionRef.current;
+        if (!sec) return;
+        const top = stuckHeight();
+        sec.style.setProperty("--mapsec-top", `${top}px`);
+        if (count > 0 && window.matchMedia("(max-width: 767.98px)").matches) setExpanded(true);
+        window.requestAnimationFrame(() => {
+          const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+          window.scrollTo({ top: window.scrollY + sec.getBoundingClientRect().top - top, behavior: still ? "auto" : "smooth" });
+          titleRef.current?.focus({ preventScroll: true });
+          let done = false;
+          const stop = () => {
+            done = true;
+            window.removeEventListener("scrollend", settle);
+            for (const t of ["wheel", "touchstart", "keydown"] as const) window.removeEventListener(t, stop);
+          };
+          const settle = () => {
+            if (done) return;
+            stop();
+            const off = sec.getBoundingClientRect().top - top;
+            if (Math.abs(off) > 2) window.scrollTo({ top: window.scrollY + off, behavior: "auto" });
+          };
+          window.addEventListener("scrollend", settle);
+          for (const t of ["wheel", "touchstart", "keydown"] as const) window.addEventListener(t, stop, { passive: true });
+          window.setTimeout(settle, 1200);
+        });
+      },
+    }),
+    [count],
+  );
   const sortLine = sort === "rank" ? "매출 상위 순" : origin ? `${originLabel}에서 가까운 순` : "가까운 순, 거리 기준점 없음";
   const hiddenRows = expanded ? 0 : Math.max(0, count - limit);
 
@@ -132,7 +192,7 @@ export function MapSection({ stores, origin, originLabel, focus, me, near, locat
     <section ref={sectionRef} className="mapsec" data-testid="map-section" data-expanded={expanded ? "true" : undefined} aria-labelledby={headId}>
       <div className="mapsec__head">
         <div className="mapsec__titles">
-          <h2 id={headId} className="mapsec__title">
+          <h2 id={headId} ref={titleRef} className="mapsec__title" tabIndex={-1}>
             지도와 전체 매장
           </h2>
           <p className="mapsec__sub">

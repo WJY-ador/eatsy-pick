@@ -30,6 +30,7 @@ export type StoreCardProps = {
  * 큐레이션 카드와 지도 옆 목록 행이 같이 쓰는 매장 카드.
  * 본문 버튼, 북마크, 잇플 링크는 형제다. 북마크와 잇플 링크를 눌러도 영수증이 열리지 않는다(앵커에 핸들러를 달지 않는다).
  * 가게명과 매출 근거를 먼저 읽게 둔다. 값이 없는 줄은 미확인으로 적거나 뺀다.
+ * 매출 상위 %는 카드마다 본문 .sc__rank 한 번만 적는다(이미지 위 배지를 두지 않는다).
  * card는 위에 16:9 업종 참고 이미지를 둔다. 이미지는 형제이고, 본문 버튼의 누름 영역이 그 위까지 덮는다(feed.css .sc__open::before).
  * row(지도 옆 목록)는 이미지 없는 낮은 행이다.
  */
@@ -60,12 +61,6 @@ export function StoreCard({ store, distanceM, onOpen, variant = "card", active =
       {variant === "card" ? (
         <div className="sc__media">
           <CategoryImage name={store.name} category={store.category} className="sc__img" priority={priority} />
-          {/* 본문 .sc__rank가 같은 수치를 읽으므로 화면 읽기에서는 뺀다 */}
-          {ranked ? (
-            <span className="sc__topbadge num" aria-hidden="true">
-              상위 {percentLabel(store.ccgRank)}
-            </span>
-          ) : null}
         </div>
       ) : null}
       <button type="button" className="sc__open" data-testid="card-open" aria-haspopup="dialog" onClick={(e) => onOpen(store, e.currentTarget)}>

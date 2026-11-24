@@ -11,6 +11,7 @@ import { AREAS, areaBySlug } from "@/lib/areas";
 import { briefingOf } from "@/lib/briefing";
 import { assignSections, SECTION_ORDER, type SectionId } from "@/lib/curation-assign";
 import { evidenceLabel } from "@/lib/evidence";
+import { foodDisplayName } from "@/lib/food";
 import { currentPosition, geolocationGranted, getGeo, type LocateError, setGeo, useGeo } from "@/lib/geo-state";
 import { NOMINATIM_ON, nominatimGeocoder, presetGeocoder, reverseGeocode } from "@/lib/geocode";
 import type { HomeData, SearchState } from "@/lib/home-data";
@@ -24,7 +25,7 @@ import { useVisits, type VisitRecord } from "@/lib/visits";
 import { Briefing } from "./Briefing";
 import { RegionChips, ThemeChips } from "./Chips";
 import { CURATION_MAX, Curation } from "./Curation";
-import { MapSection } from "./MapSection";
+import { MapSection, type MapSectionHandle } from "./MapSection";
 import { Receipt } from "./Receipt";
 import { TasteSummary, useHydrated } from "./TasteSummary";
 
@@ -269,7 +270,7 @@ export function HomeView({ data }: { data: HomeData }) {
   }, []);
 
   const where = dataset ? (nearShown ? `내 주변, ${dataset.title}` : dataset.title) : scopeName(scope);
-  const region = dataset && h.food ? `${where}, ${h.food} 업종` : where;
+  const region = dataset && h.food ? `${where} ${foodDisplayName(h.food)} 업종` : where;
   /** 큐레이션 제목의 지역 이름(음식 조건과 내 주변 표시는 빼고 조회 지역만) */
   const areaTitle = dataset?.title ?? scopeName(scope);
 
@@ -320,6 +321,11 @@ export function HomeView({ data }: { data: HomeData }) {
     first?.scrollIntoView({ block: "nearest" });
     first?.focus();
   };
+
+  // 지역 줄의 지도 보기: 지도 섹션이 그려질 때만 버튼을 둔다(조회 실패, 0건, 빈 테마에는 없다). 큐레이션 순서는 그대로다.
+  const mapRef = useRef<MapSectionHandle>(null);
+  const mapShown = !!dataset && pool.length > 0 && themed.length > 0;
+  const onMap = useCallback(() => mapRef.current?.reveal(), []);
 
   // 지도와 목록에 보이는 수가 분석 대상 수와 다르면 무슨 수인지 적는다(지도는 위치 정보가 있는 곳만 그린다).
   const mapped = themed.filter((s) => s.lat !== null && s.lng !== null).length;
@@ -382,7 +388,7 @@ export function HomeView({ data }: { data: HomeData }) {
     <div className="feed">
       <h1 className="visually-hidden">{region} 결제 데이터로 고르는 가게</h1>
       <div className="feed__filters">
-        <RegionChips activeSlug={scope.kind === "area" ? scope.slug : null} near={nearShown} locating={geo.locating} hrefFor={regionHref} onNear={onNear} />
+        <RegionChips activeSlug={scope.kind === "area" ? scope.slug : null} near={nearShown} locating={geo.locating} hrefFor={regionHref} onNear={onNear} onMap={mapShown ? onMap : undefined} />
         <ThemeChips theme={theme} onTheme={pickTheme} exclude={exclude} onExclude={toggleExclude} />
       </div>
 
@@ -426,7 +432,7 @@ export function HomeView({ data }: { data: HomeData }) {
         </div>
       ) : all.length === 0 ? (
         <div className="state">
-          <h2 className="state__h">{h.food ? `${scopeName(scope)}에서 ${h.food} 업종 가게를 찾지 못했습니다.` : `${scopeName(scope)}에서 결제 데이터를 찾지 못했습니다.`}</h2>
+          <h2 className="state__h">{h.food ? `${scopeName(scope)}에서 ${foodDisplayName(h.food)} 업종 가게를 찾지 못했습니다.` : `${scopeName(scope)}에서 결제 데이터를 찾지 못했습니다.`}</h2>
           <p>
             지금 조건: 지역 {scopeName(scope)}
             {h.food ? `, 음식 ${h.foodTerm}` : ""}. 다른 지역을 고르거나 검색어를 바꿔 보세요.
@@ -457,7 +463,7 @@ export function HomeView({ data }: { data: HomeData }) {
               <h2 className="state__h">
                 {region}에서 {themeLabel} 조건에 맞는 매장이 없습니다.
               </h2>
-              <p>테마를 해제하면 같은 지역의 매장 {pool.length}곳을 다시 볼 수 있습니다. 다른 지역에서는 결과가 있을 수 있습니다.</p>
+              <p>테마를 해제하면 같은 지역의 매장 {pool.length}곳이 다시 보입니다. 지역을 바꾸면 그 지역에서 같은 테마로 다시 찾습니다.</p>
               <div className="state__act">
                 <button type="button" className="btn btn--primary" onClick={() => pickTheme("all")}>
                   테마 해제
@@ -490,6 +496,7 @@ export function HomeView({ data }: { data: HomeData }) {
 
           {themed.length > 0 ? (
             <MapSection
+              ref={mapRef}
               stores={themed}
               origin={origin?.point ?? null}
               originLabel={origin?.label ?? ""}

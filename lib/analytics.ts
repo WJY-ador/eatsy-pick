@@ -13,8 +13,10 @@ export type Filters = {
   cat: string | null;
   /** 대표 피크 "요일-시간대"(예 "금-저녁") */
   peak: string | null;
-  /** 고객층 원문(예 "30대남성") */
+  /** 고객층 원문(예 "30대남성"). 1~3위 중 하나라도 그 고객층인 매장 */
   cust: string | null;
+  /** 1위 고객층 원문. 원본 rk01(customer1)이 그 고객층인 매장만. URL c1 */
+  c1: string | null;
   /** 프랜차이즈 제외. 기본 true, URL fr=0이면 false */
   fr: boolean;
   /** 동네맛집(loclPrsnPpltYn === true)만. URL local=1 */
@@ -22,11 +24,11 @@ export type Filters = {
   /** 회식 적합(empyVsitYn === true)만. URL hoesik=1 */
   hoesik: boolean;
 };
-export type FilterKey = "cat" | "peak" | "cust";
+export type FilterKey = "cat" | "peak" | "cust" | "c1";
 /** KPI를 눌러 거는 조건. 이름이 Store의 필드 이름과 같다 */
 export type Flag = "local" | "hoesik";
 export const FLAGS: readonly Flag[] = ["local", "hoesik"];
-export const EMPTY_FILTERS: Filters = { cat: null, peak: null, cust: null, fr: true, local: false, hoesik: false };
+export const EMPTY_FILTERS: Filters = { cat: null, peak: null, cust: null, c1: null, fr: true, local: false, hoesik: false };
 
 type RawParams = Record<string, string | string[] | undefined>;
 
@@ -45,17 +47,22 @@ const PEAK_RE = new RegExp(`^(${DAYS.join("|")})-(${TIMES.join("|")})$`);
 export function parseFilters(raw: RawParams): Filters {
   const peak = clean(first(raw.peak), 8);
   const cust = clean(first(raw.cust), 20);
+  const c1 = clean(first(raw.c1), 20);
   return {
     cat: clean(first(raw.cat), 40),
     peak: peak && PEAK_RE.test(peak) ? peak : null,
     cust: cust && /^[0-9가-힣 ]+$/.test(cust) ? cust : null,
+    c1: c1 && /^[0-9가-힣 ]+$/.test(c1) ? c1 : null,
     fr: first(raw.fr) !== "0",
     local: first(raw.local) === "1",
     hoesik: first(raw.hoesik) === "1",
   };
 }
 
-/** 필터를 쿼리 쌍으로. 순서는 cat, peak, cust, local, hoesik, fr. 기본값(fr 켬, 선택 없음)은 넣지 않는다. */
+/**
+ * 필터를 쿼리 쌍으로. 순서는 cat, peak, cust, local, hoesik, fr, c1. 기본값(fr 켬, 선택 없음)은 넣지 않는다.
+ * c1은 나중에 생긴 키라 맨 뒤에 둔다(c1이 없는 기존 공유 주소는 글자 그대로 같다).
+ */
 export function filterEntries(f: Filters): [string, string][] {
   const out: [string, string][] = [];
   if (f.cat) out.push(["cat", f.cat]);
@@ -64,6 +71,7 @@ export function filterEntries(f: Filters): [string, string][] {
   if (f.local) out.push(["local", "1"]);
   if (f.hoesik) out.push(["hoesik", "1"]);
   if (!f.fr) out.push(["fr", "0"]);
+  if (f.c1) out.push(["c1", f.c1]);
   return out;
 }
 
@@ -88,6 +96,7 @@ export function sanitizeFilters(stores: Store[], f: Filters): Filters {
     cat: f.cat && stores.some((s) => s.category === f.cat) ? f.cat : null,
     peak: f.peak && stores.some((s) => peakKey(s) === f.peak) ? f.peak : null,
     cust: f.cust && stores.some((s) => s.customers.includes(f.cust as string)) ? f.cust : null,
+    c1: f.c1 && stores.some((s) => customer1Of(s) === f.c1) ? f.c1 : null,
   };
 }
 
@@ -106,7 +115,7 @@ export function hasFlag(f: Filters): boolean {
 }
 
 export function hasSelection(f: Filters): boolean {
-  return Boolean(f.cat || f.peak || f.cust || hasFlag(f));
+  return Boolean(f.cat || f.peak || f.cust || f.c1 || hasFlag(f));
 }
 
 /** 프랜차이즈 제외만 적용한 집합 */
@@ -114,16 +123,18 @@ export function baseStores(stores: Store[], fr: boolean): Store[] {
   return fr ? stores.filter((s) => !s.franchise) : stores;
 }
 
-function matches(s: Store, f: Filters, except?: FilterKey): boolean {
-  if (except !== "cat" && f.cat && s.category !== f.cat) return false;
-  if (except !== "peak" && f.peak && peakKey(s) !== f.peak) return false;
-  if (except !== "cust" && f.cust && !s.customers.includes(f.cust)) return false;
+function matches(s: Store, f: Filters, except: readonly FilterKey[]): boolean {
+  if (!except.includes("cat") && f.cat && s.category !== f.cat) return false;
+  if (!except.includes("peak") && f.peak && peakKey(s) !== f.peak) return false;
+  if (!except.includes("cust") && f.cust && !s.customers.includes(f.cust)) return false;
+  if (!except.includes("c1") && f.c1 && customer1Of(s) !== f.c1) return false;
   return true;
 }
 
 /** 프랜차이즈 제외 + 차트 필터 교집합. except를 주면 그 차트의 필터만 뺀다. KPI 조건은 여기서 걸지 않는다(matchFlags). */
-export function applyFilters(stores: Store[], f: Filters, except?: FilterKey): Store[] {
-  return baseStores(stores, f.fr).filter((s) => matches(s, f, except));
+export function applyFilters(stores: Store[], f: Filters, except?: FilterKey | readonly FilterKey[]): Store[] {
+  const ex: readonly FilterKey[] = except === undefined ? [] : typeof except === "string" ? [except] : except;
+  return baseStores(stores, f.fr).filter((s) => matches(s, f, ex));
 }
 
 /** 켠 KPI 조건을 모두 충족하는 매장. 값이 true인 매장만 남긴다(false와 누락은 뺀다) */
@@ -153,6 +164,47 @@ export function ratioPercent(r: Ratio): number | null {
 
 export type TopCustomer = { leaders: string[]; num: number; den: number };
 
+/** 원본 rk01. 옛 기기 스냅샷에는 customer1이 없을 수 있다(undefined와 빈 값은 미확인). rk02를 올리지 않는다 */
+export function customer1Of(s: Store): string | null {
+  return typeof s.customer1 === "string" && s.customer1 !== "" ? s.customer1 : null;
+}
+
+/** 대표 피크 한 쌍이 확인된 매장의 키. 요일이 월~일 밖이면 미확인 */
+export function validPeakKey(s: Store): string | null {
+  const k = peakKey(s);
+  return k && (DAYS as readonly string[]).includes(s.peakDay as string) ? k : null;
+}
+
+/**
+ * 가장 많이 나온 값(최빈값). null은 미확인으로 분모에서 뺀다. 동률이면 모두 leaders에 넣는다(처음 나온 순서).
+ * 확인된 값이 하나도 없으면 null.
+ */
+export function leadersOf(values: (string | null)[]): TopCustomer | null {
+  const counts = new Map<string, number>();
+  let den = 0;
+  for (const v of values) {
+    if (!v) continue;
+    den += 1;
+    counts.set(v, (counts.get(v) ?? 0) + 1);
+  }
+  if (den === 0) return null;
+  const max = Math.max(...counts.values());
+  return { leaders: [...counts].filter(([, n]) => n === max).map(([k]) => k), num: max, den };
+}
+
+/** 요약 줄. 현재 조건에 맞는 매장(지도, 목록과 같은 집합)에서 센다 */
+export type Summary = {
+  total: number;
+  /** 대표 피크 "요일-시간대" 최빈값. num은 그 조합이 대표 피크인 매장 수, den은 대표 피크가 확인된 매장 수 */
+  peak: TopCustomer | null;
+  /** 원본 rk01 최빈값. num은 그 고객층이 1위인 매장 수, den은 rk01이 확인된 매장 수 */
+  customer: TopCustomer | null;
+};
+
+export function summarize(stores: Store[]): Summary {
+  return { total: stores.length, peak: leadersOf(stores.map(validPeakKey)), customer: leadersOf(stores.map(customer1Of)) };
+}
+
 export type Kpis = {
   count: number;
   local: Ratio;
@@ -162,25 +214,11 @@ export type Kpis = {
 };
 
 export function computeKpis(stores: Store[]): Kpis {
-  const counts = new Map<string, number>();
-  let den = 0;
-  for (const s of stores) {
-    // 옛 기기 스냅샷에는 customer1이 없을 수 있다(undefined도 미확인).
-    const c = typeof s.customer1 === "string" && s.customer1 !== "" ? s.customer1 : null;
-    if (!c) continue;
-    den += 1;
-    counts.set(c, (counts.get(c) ?? 0) + 1);
-  }
-  let top: TopCustomer | null = null;
-  if (den > 0) {
-    const max = Math.max(...counts.values());
-    top = { leaders: [...counts].filter(([, n]) => n === max).map(([k]) => k), num: max, den };
-  }
   return {
     count: stores.length,
     local: ratioOf(stores, (s) => s.local),
     hoesik: ratioOf(stores, (s) => s.hoesik),
-    topCustomer: top,
+    topCustomer: leadersOf(stores.map(customer1Of)),
   };
 }
 
@@ -247,6 +285,30 @@ export function computeCustomerBars(stores: Store[], selected: string | null = n
   return { bars: sortBars(m, selected), sample };
 }
 
+/**
+ * 업종별 1위 고객층(원본 rk01) 분포. 업종마다 rk01이 그 고객층인 매장 수를 센다.
+ * den은 그 업종에서 rk01이 확인된 매장 수, size는 그 업종의 매장 수(rk01 미확인 포함). 업종은 rk01 확인 매장 수 내림차순.
+ */
+export type CategoryCustomer = { category: string; bars: Bar[]; den: number; size: number };
+
+export function computeCategoryCustomers(stores: Store[], selected: { cat: string | null; c1: string | null } = { cat: null, c1: null }): CategoryCustomer[] {
+  const by = new Map<string, { m: Map<string, number>; den: number; size: number }>();
+  for (const s of stores) {
+    const g = by.get(s.category) ?? { m: new Map<string, number>(), den: 0, size: 0 };
+    g.size += 1;
+    const c = customer1Of(s);
+    if (c) {
+      g.den += 1;
+      g.m.set(c, (g.m.get(c) ?? 0) + 1);
+    }
+    by.set(s.category, g);
+  }
+  if (selected.cat && !by.has(selected.cat)) by.set(selected.cat, { m: new Map(), den: 0, size: 0 });
+  return [...by]
+    .map(([category, g]) => ({ category, bars: sortBars(g.m, category === selected.cat ? selected.c1 : null), den: g.den, size: g.size }))
+    .sort((a, b) => b.den - a.den || b.size - a.size || a.category.localeCompare(b.category, "ko"));
+}
+
 /** 업종별 매장 수 내림차순(같으면 가나다순) */
 export function computeCategoryBars(stores: Store[], selected: string | null = null): Bar[] {
   const m = new Map<string, number>();
@@ -266,7 +328,11 @@ export type Analysis = {
   /** 각 차트는 자기 필터를 뺀 나머지 필터로 계산한다 */
   peak: PeakGrid;
   customers: CustomerBars;
+  /** 업종별 1위 고객층 분포. 업종과 1위 고객층 필터만 뺀 나머지 필터로 센다 */
+  categoryCustomers: CategoryCustomer[];
   categories: Bar[];
+  /** 요약 줄(현재 조건 = matched 기준) */
+  summary: Summary;
   /** 응답 전체에서 프랜차이즈로 판정된 매장 수 */
   franchiseCount: number;
 };
@@ -275,17 +341,55 @@ export function analyze(stores: Store[], filters: Filters): Analysis {
   const f = sanitizeFilters(stores, filters);
   const base = baseStores(stores, f.fr);
   const filtered = applyFilters(stores, f);
+  const matched = matchFlags(filtered, f);
   return {
     filters: f,
     base,
     filtered,
-    matched: matchFlags(filtered, f),
+    matched,
     kpis: computeKpis(filtered),
     peak: computePeakGrid(applyFilters(stores, f, "peak"), base, f.peak),
     customers: computeCustomerBars(applyFilters(stores, f, "cust"), f.cust),
+    categoryCustomers: computeCategoryCustomers(applyFilters(stores, f, ["cat", "c1"]), { cat: f.cat, c1: f.c1 }),
     categories: computeCategoryBars(applyFilters(stores, f, "cat"), f.cat),
+    summary: summarize(matched),
     franchiseCount: stores.filter((s) => s.franchise).length,
   };
+}
+
+/** 산점도 점 하나. ccg와 all은 원본 백분위(0~100, 작을수록 상위) */
+export type ScatterPoint = { store: Store; ccg: number; all: number };
+
+function pct(v: number | null): number | null {
+  return typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= 100 ? v : null;
+}
+
+/** 시군구(ccgSaleRnk)와 전국(allSaleRnk) 두 값이 모두 0~100의 수인 매장만. 순서는 받은 순서 */
+export function scatterPoints(stores: Store[]): ScatterPoint[] {
+  const out: ScatterPoint[] = [];
+  for (const s of stores) {
+    const ccg = pct(s.ccgRank);
+    const all = pct(s.allRank);
+    if (ccg !== null && all !== null) out.push({ store: s, ccg, all });
+  }
+  return out;
+}
+
+/** 화면에서 겹치는 점 묶음. x, y는 묶음을 그릴 자리(첫 매장의 값) */
+export type ScatterGroup = { x: number; y: number; points: ScatterPoint[] };
+
+/**
+ * 겹치는 점을 묶는다. 이미 있는 묶음의 자리와 가로 tx, 세로 ty(% 단위) 안이면 그 묶음에 넣고, 아니면 새 묶음을 연다.
+ * 묶음 자리끼리는 tx 또는 ty 이상 떨어지므로, 그 크기 이하로 그린 표식은 서로 겹치지 않는다.
+ */
+export function groupScatter(points: ScatterPoint[], tx: number, ty: number): ScatterGroup[] {
+  const groups: ScatterGroup[] = [];
+  for (const p of points) {
+    const g = groups.find((q) => Math.abs(q.x - p.ccg) < tx && Math.abs(q.y - p.all) < ty);
+    if (g) g.points.push(p);
+    else groups.push({ x: p.ccg, y: p.all, points: [p] });
+  }
+  return groups;
 }
 
 /** 원본 백분위 그대로: 0.04 → "0.04%", 100 → "100%", null → "정보 없음". 올림, 반올림 없음. */

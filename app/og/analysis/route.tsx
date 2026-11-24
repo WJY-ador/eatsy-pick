@@ -2,14 +2,14 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { ImageResponse } from "next/og";
 import type { NextRequest } from "next/server";
-import { loadInput, parseScope, scopeName } from "@/components/analysis/scope";
+import { PAGE_INTRO, foodLabel, loadInput, pageTitle, parseScope, scopeName } from "@/components/analysis/scope";
 import { type Analysis, type Ratio, analyze, parseFilters, ratioPercent, splitPeak } from "@/lib/analytics";
 import { customerLabel } from "@/lib/labels";
 import { OG_COLORS as C } from "@/lib/og-theme";
 import { ATTRIBUTION, SITE_NAME } from "@/lib/site";
 import { loadArea } from "@/lib/stores";
 
-// 상권 분석 공유 카드 1200×630. /analysis와 같은 쿼리(area|loc, food, cat, peak, cust, local, hoesik, fr)를 받는다.
+// 맛집 한눈에(/analysis) 공유 카드 1200×630. /analysis와 같은 쿼리(area|loc, food, cat, peak, cust, local, hoesik, fr, c1)를 받는다.
 // 어떤 경우에도 500을 내지 않는다: 조회 실패나 0곳이면 일반 카드. 폰트는 /og와 같은 방식으로 fs로 읽는다.
 export const maxDuration = 30;
 
@@ -61,8 +61,8 @@ function GenericCard() {
     <div style={{ display: "flex", flexDirection: "column", width: W, height: H, background: C.paper, fontFamily: "Pretendard" }}>
       <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", flex: 1, padding: "0 56px" }}>
         <div style={{ display: "flex", color: C.muted, fontSize: 32, fontWeight: 700 }}>{SITE_NAME}</div>
-        <div style={{ display: "flex", marginTop: 16, color: C.ink, fontSize: 76, fontWeight: 700, letterSpacing: -2 }}>상권 분석</div>
-        <div style={{ display: "flex", marginTop: 24, color: C.ink2, fontSize: 36 }}>업종, 대표 피크, 주 고객층을 결제 데이터로 나눠 봅니다</div>
+        <div style={{ display: "flex", marginTop: 16, color: C.ink, fontSize: 76, fontWeight: 700, letterSpacing: -2 }}>맛집 한눈에</div>
+        <div style={{ display: "flex", marginTop: 24, color: C.ink2, fontSize: 36 }}>{PAGE_INTRO}</div>
       </div>
       <Foot />
     </div>
@@ -93,7 +93,8 @@ function AnalysisCard({ title, scopeLabel, food, a }: { title: string; scopeLabe
     const { day, time } = splitPeak(f.peak);
     parts.push(`${day} ${time} 피크`);
   }
-  if (f.cust) parts.push(customerLabel(f.cust));
+  if (f.cust) parts.push(`고객층 1~3위에 ${customerLabel(f.cust)}`);
+  if (f.c1) parts.push(`1위 고객층 ${customerLabel(f.c1)}`);
   parts.push(f.fr ? "프랜차이즈 제외" : "프랜차이즈 포함");
   const local = ratioText(a.kpis.local);
   const hoesik = ratioText(a.kpis.hoesik);
@@ -101,7 +102,7 @@ function AnalysisCard({ title, scopeLabel, food, a }: { title: string; scopeLabe
   return (
     <div style={{ display: "flex", flexDirection: "column", width: W, height: H, background: C.paper, fontFamily: "Pretendard" }}>
       <div style={{ display: "flex", flexDirection: "column", flex: 1, padding: "48px 56px 0" }}>
-        <div style={{ display: "flex", color: C.muted, fontSize: 26, fontWeight: 700 }}>상권 분석</div>
+        <div style={{ display: "flex", color: C.muted, fontSize: 26, fontWeight: 700 }}>동네 가게 카드 결제 데이터 비교</div>
         <div style={{ display: "flex", marginTop: 6, color: C.ink, fontSize: 64, fontWeight: 700, letterSpacing: -1.5 }}>{title}</div>
         <div style={{ display: "flex", marginTop: 10, color: C.ink2, fontSize: 28 }}>{parts.join(", ")}</div>
         <div style={{ display: "flex", alignItems: "baseline", marginTop: 28 }}>
@@ -142,7 +143,8 @@ export async function GET(request: NextRequest) {
     const dataset = await loadArea(loadInput(scope));
     if (dataset.stores.length > 0) {
       const a = analyze(dataset.stores, parseFilters(raw));
-      return await render(<AnalysisCard title={dataset.title || scopeName(scope)} scopeLabel={dataset.scopeLabel} food={scope.food ?? null} a={a} />);
+      const place = dataset.title || scopeName(scope);
+      return await render(<AnalysisCard title={pageTitle(place, scope)} scopeLabel={dataset.scopeLabel} food={foodLabel(scope)} a={a} />);
     }
   } catch {
     // 아래 일반 카드로 간다.

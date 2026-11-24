@@ -3,10 +3,11 @@ import { cache } from "react";
 import { HomeView } from "@/components/home/HomeView";
 import { NavDone } from "@/components/NavLink";
 import { AREAS } from "@/lib/areas";
+import { foodDisplayName } from "@/lib/food";
 import type { PresetPoint } from "@/lib/geocode";
 import type { HomeData, PlaceHit, SearchState } from "@/lib/home-data";
-import { type HomeQuery, homeHref, parseHome, scopeEntries, scopeInput, scopeName } from "@/lib/home-params";
-import { SITE_NAME } from "@/lib/site";
+import { type HomeQuery, homeHref, parseHome, scopeInput, scopeName } from "@/lib/home-params";
+import { SITE_NAME, shareImages, shareTwitterImages } from "@/lib/site";
 import { regionForWord } from "@/lib/place";
 import { type AreaDataset, loadAreaWithPlace, presetCenter, searchStores } from "@/lib/stores";
 import { THEMES } from "@/lib/themes";
@@ -85,21 +86,27 @@ export async function generateMetadata({ searchParams }: PageProps<"/">): Promis
     ? `${SITE_NAME} | BC카드 결제 데이터로 찾는 동네 맛집 지도`
     : nameSearch
       ? `${nameSearch} 매장 검색 | ${SITE_NAME}`
-      : `${name}${h.food ? `, ${h.food} 업종` : ""}${theme ? `, ${theme}` : ""} 후보 | ${SITE_NAME}`;
+      : `${name}${h.food ? ` ${foodDisplayName(h.food)}` : ""} 맛집${theme ? `, ${theme}` : ""} | ${SITE_NAME}`;
   const description = plain
     ? "BC카드 실제 결제 데이터로 내 주변 매출 상위 가게, 동네맛집, 회식 장소를 지도에서 찾고, 가고 싶은 곳을 저장해 관리하세요."
     : nameSearch
       ? `${nameSearch} 이름으로 찾은 가게를 지점별 주소와 BC카드 결제 데이터로 확인합니다.`
-      : `${name}${h.food ? ` ${h.food}` : ""} 가게를 BC카드 결제 데이터로 확인하세요.${theme ? ` ${theme} 조건이 적용된 매장을 지도에서 보고 저장할 수 있습니다.` : " 매출 상위 1%, 동네맛집, 회식 적합 조건으로 찾아보고 저장할 수 있습니다."}`;
+      : `${name}${h.food ? ` ${foodDisplayName(h.food)}` : ""} 가게를 BC카드 결제 데이터로 확인하세요.${theme ? ` ${theme} 조건이 적용된 매장을 지도에서 보고 저장할 수 있습니다.` : " 매출 상위 1%, 동네맛집, 회식 적합 조건으로 찾아보고 저장할 수 있습니다."}`;
   // 공유 주소와 OG에는 범위, 검색어, 테마만 넣는다(near, 좌표, 개인 기록 없음).
   const canonical = plain ? "/" : homeHref(h.scope, { q: nameSearch ?? h.foodTerm, theme: h.theme });
-  const image = `/og?${new URLSearchParams(scopeEntries(h.scope)).toString()}`;
+  const foodName = h.food ? foodDisplayName(h.food) : null;
+  const shareTitle = nameSearch ? title : `BC카드 결제 데이터로 비교한 ${name}${foodName ? ` ${foodName}` : ""} 맛집 | ${SITE_NAME}`;
+  const shareDescription = nameSearch
+    ? description
+    : foodName
+      ? `BC카드 결제 데이터로 ${name} ${foodName} 매장의 매출 상위 1%, 동네맛집, 회식 적합 표시를 확인하세요.`
+      : `BC카드 결제 데이터로 ${name}의 매출 상위 1%, 동네맛집, 회식 적합 매장을 확인하세요.`;
   return {
     title: { absolute: title },
     description,
     alternates: { canonical },
-    openGraph: { type: "website", locale: "ko_KR", siteName: SITE_NAME, url: canonical, title, description, images: [{ url: image, width: 1200, height: 630, alt: `${name} 결제 데이터 후보` }] },
-    twitter: { card: "summary_large_image", title, description, images: [image] },
+    openGraph: { type: "website", locale: "ko_KR", siteName: SITE_NAME, url: canonical, title: shareTitle, description: shareDescription, images: shareImages(title) },
+    twitter: { card: "summary_large_image", title: shareTitle, description: shareDescription, images: shareTwitterImages(title) },
   };
 }
 

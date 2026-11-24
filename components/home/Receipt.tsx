@@ -236,7 +236,7 @@ export function Receipt({
             </Row>
             <Row label="예상 영업시간">
               {hours ? <span className="num">{hours}</span> : "정보 없음"}
-              <span className="rc__note">최근 1개월 결제 승인 시각 기준 추정</span>
+              <span className="rc__note">최근 1개월 결제 승인 시각 기준</span>
             </Row>
             {store.holidays.length ? <Row label="휴무 요일">{store.holidays.join(", ")}</Row> : null}
           </dl>

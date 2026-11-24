@@ -2,6 +2,22 @@
 // 의무 문자열 네 개는 대회 규칙 원문이다. 가운뎃점과 화살표를 고치지 않는다.
 
 export const SITE_NAME = "eatsy pick";
+/** 공유 썸네일(사용자 제작 assets/promotion.png에서 만든 정적 이미지). 이미지를 바꾸면 ?v= 숫자를 올려 캐시를 끊는다. */
+export const SITE_OG_IMAGE = "/og/share-1200x630.jpg?v=1";
+export const SITE_OG_IMAGE_SQUARE = "/og/share-square.jpg?v=1";
+
+/** og:image 배열. 가로판(1200x630)을 첫째, 정사각형(1200x1200)을 둘째로 둔다. alt는 페이지 제목. */
+export function shareImages(alt: string) {
+  return [
+    { url: SITE_OG_IMAGE, width: 1200, height: 630, alt, type: "image/jpeg" },
+    { url: SITE_OG_IMAGE_SQUARE, width: 1200, height: 1200, alt, type: "image/jpeg" },
+  ];
+}
+
+/** twitter:image. summary_large_image에는 가로판을 쓴다. */
+export function shareTwitterImages(alt: string) {
+  return [{ url: SITE_OG_IMAGE, alt }];
+}
 export const SITE_DESCRIPTION =
   "내 주변 가게를 BC카드 결제 데이터로 고르고, 다녀온 곳의 반응을 다음 약속에 다시 씁니다. 로그인 없이 바로 씁니다.";
 /** 첫 화면 한 줄 설명(사용자 원문 그대로, 가운뎃점 유지) */

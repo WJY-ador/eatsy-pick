@@ -117,7 +117,7 @@ export function BarChart({
   onExpand,
   moreLabel,
 }: {
-  name: "cat" | "cust";
+  name: "cat" | "cust" | "c1";
   bars: Bar[];
   selected: string | null;
   onPick: (key: string) => void;
