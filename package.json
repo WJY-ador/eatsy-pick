@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "blog:draft": "node scripts/blog-draft.mjs"
+    "blog:facts": "node scripts/blog-facts.mjs",
+    "blog:check": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/blog-check.mjs"
   },
   "dependencies": {
     "leaflet": "^1.9.4",
