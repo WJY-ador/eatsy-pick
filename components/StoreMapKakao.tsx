@@ -28,7 +28,6 @@ type KMap = {
   setCenter(p: KLatLng): void;
   getLevel(): number;
   setLevel(lv: number): void;
-  setDraggable(on: boolean): void;
   relayout(): void;
   getProjection(): { containerPointFromCoords(p: KLatLng): { x: number; y: number } };
 };
@@ -84,7 +83,7 @@ function kakaoMarks(box: HTMLElement): Element[] {
   return [top];
 }
 
-export default function StoreMapKakao({ stores, selectedId, onSelect, me, near, focus, hoverId, labelTop, apiRef, onUserView, locked, onFail }: MapAdapterProps & { onFail: () => void }) {
+export default function StoreMapKakao({ stores, selectedId, onSelect, me, near, focus, hoverId, labelTop, apiRef, onUserView, onFail }: MapAdapterProps & { onFail: () => void }) {
   const boxRef = useRef<HTMLDivElement>(null);
   const kRef = useRef<KakaoNS | null>(null);
   const mapRef = useRef<KMap | null>(null);
@@ -99,7 +98,6 @@ export default function StoreMapKakao({ stores, selectedId, onSelect, me, near, 
   const selectedRef = useRef(selectedId);
   const hoverRef = useRef(hoverId);
   const modeRef = useRef<Mode>("home");
-  const lockedRef = useRef(locked);
   /** 마지막 사용자 제스처 시각(performance.now). 현 지도에서 검색 버튼은 제스처로 시작된 이동에만 뜬다 */
   const gestureAtRef = useRef(0);
   /** 마지막으로 묶음을 계산한 단계. 단계가 그대로인 이동(끌기)에서는 다시 묶지 않는다 */
@@ -251,7 +249,10 @@ export default function StoreMapKakao({ stores, selectedId, onSelect, me, near, 
             if (map.getLevel() > ME_LEVEL) map.setLevel(ME_LEVEL);
             map.setCenter(m.pos);
           },
-          setTouchDrag: (on) => map.setDraggable(on || !lockedRef.current),
+          touchPan: () => {
+            modeRef.current = "user";
+            gestureAtRef.current = performance.now();
+          },
         };
         setReadyTick((v) => v + 1);
       })
@@ -265,7 +266,7 @@ export default function StoreMapKakao({ stores, selectedId, onSelect, me, near, 
     };
     box.addEventListener("pointerdown", touched);
     box.addEventListener("wheel", touched, { passive: true });
-    // 지도 크게 보기처럼 크기가 바뀌면 다시 그리고, 보기 상태가 home이나 all이면 그 규칙대로 다시 맞춘다.
+    // 화면 폭이나 높이가 바뀌어 지도 크기가 바뀌면 다시 그리고, 보기 상태가 home이나 all이면 그 규칙대로 다시 맞춘다.
     const ro = new ResizeObserver(() => {
       if (!mapRef.current) return;
       mapRef.current.relayout();
@@ -290,14 +291,6 @@ export default function StoreMapKakao({ stores, selectedId, onSelect, me, near, 
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // 터치 잠금: 한 손가락 끌기를 끈다(두 손가락일 때는 StoreMap이 setTouchDrag로 잠깐 푼다).
-  // 지도는 SDK를 불러온 뒤 생기므로 readyTick에도 다시 건다.
-  useEffect(() => {
-    lockedRef.current = locked;
-    apiRef.current?.setTouchDrag(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [locked, readyTick]);
 
   // 핀은 매장 id 집합이 바뀔 때만 다시 만든다. 바뀌면 첫 화면 규칙으로 돌아간다.
   const idsKey = stores

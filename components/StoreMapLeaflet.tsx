@@ -37,7 +37,7 @@ function meIcon(): L.DivIcon {
   return L.divIcon({ className: "smme", html: '<span class="smme__dot"></span>', iconSize: [28, 28], iconAnchor: [14, 14] });
 }
 
-export default function StoreMapLeaflet({ stores, selectedId, onSelect, me, near, focus, hoverId, labelTop, apiRef, onUserView, locked }: MapAdapterProps) {
+export default function StoreMapLeaflet({ stores, selectedId, onSelect, me, near, focus, hoverId, labelTop, apiRef, onUserView }: MapAdapterProps) {
   const boxRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const pinsRef = useRef<Map<string, Pin>>(new Map());
@@ -51,7 +51,6 @@ export default function StoreMapLeaflet({ stores, selectedId, onSelect, me, near
   const hoverRef = useRef(hoverId);
   const modeRef = useRef<Mode>("home");
   const pendingRef = useRef(false);
-  const lockedRef = useRef(locked);
   /** 마지막 사용자 제스처 시각(performance.now). 현 지도에서 검색 버튼은 제스처로 시작된 이동에만 뜬다 */
   const gestureAtRef = useRef(0);
 
@@ -199,9 +198,9 @@ export default function StoreMapLeaflet({ stores, selectedId, onSelect, me, near
         modeRef.current = "user";
         map.setView(m.getLatLng(), Math.max(map.getZoom(), ME_ZOOM), { animate: !still });
       },
-      setTouchDrag: (on) => {
-        if (on || !lockedRef.current) map.dragging.enable();
-        else map.dragging.disable();
+      touchPan: () => {
+        modeRef.current = "user";
+        gestureAtRef.current = performance.now();
       },
     };
     // 사용자가 지도를 만지면(끌기, 휠, 방향키) 그 뒤로는 보기를 다시 맞추지 않는다. 핀과 묶음 버튼 누름은 만짐으로 치지 않는다.
@@ -212,7 +211,7 @@ export default function StoreMapLeaflet({ stores, selectedId, onSelect, me, near
     box.addEventListener("pointerdown", touched);
     box.addEventListener("wheel", touched, { passive: true });
     box.addEventListener("keydown", touched);
-    // 지도 크게 보기처럼 크기가 바뀌면 타일을 다시 맞추고, 보기 상태가 home이나 all이면 그 규칙대로 다시 맞춘다.
+    // 화면 폭이나 높이가 바뀌어 지도 크기가 바뀌면 타일을 다시 맞추고, 보기 상태가 home이나 all이면 그 규칙대로 다시 맞춘다.
     const ro = new ResizeObserver(() => {
       map.invalidateSize();
       if (pendingRef.current || modeRef.current !== "user") applyView();
@@ -236,13 +235,6 @@ export default function StoreMapLeaflet({ stores, selectedId, onSelect, me, near
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // 터치 잠금: 한 손가락 끌기를 끈다(두 손가락일 때는 StoreMap이 setTouchDrag로 잠깐 푼다).
-  useEffect(() => {
-    lockedRef.current = locked;
-    apiRef.current?.setTouchDrag(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [locked]);
 
   // 핀은 매장 id 집합이 바뀔 때만 다시 만든다(같은 집합의 새 배열이면 그대로 둔다). 바뀌면 첫 화면 규칙으로 돌아간다.
   const idsKey = stores
