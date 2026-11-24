@@ -9,5 +9,5 @@ export const OG_COLORS = {
   muted: "#5d6166", // --color-muted oklch(49% 0.01 260)
   rule: "#dee0e2", // --color-rule oklch(90.5% 0.004 260)
   data: "#1161bb", // --color-data oklch(50% 0.16 256), 흰 글자 대비 6.09:1
-  accent: "#d23800", // --color-cta, 흰 글자 대비 4.78:1
+  accent: "#EA580C", // --color-cta, 흰 글자 대비 3.56:1(흰 글자는 굵은 큰 글자에만)
 } as const;

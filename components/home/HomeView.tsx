@@ -1,74 +1,122 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import "@/app/feed.css";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { EvidenceChart } from "@/components/evidence";
 import { MerLink } from "@/components/MerLink";
 import { NavLink, setNavPending } from "@/components/NavLink";
 import { Sheet } from "@/components/Sheet";
-import { StoreMap } from "@/components/StoreMap";
-import { StoreSignalDetail } from "@/components/visits";
-import { AREAS } from "@/lib/areas";
-import { type EvidenceKind, evidenceLabel } from "@/lib/evidence";
+import { AREAS, areaBySlug } from "@/lib/areas";
+import { briefingOf } from "@/lib/briefing";
+import { assignSections, SECTION_ORDER, type SectionId } from "@/lib/curation-assign";
+import { evidenceLabel } from "@/lib/evidence";
 import { currentPosition, geolocationGranted, getGeo, type LocateError, setGeo, useGeo } from "@/lib/geo-state";
-import { NOMINATIM_ON, type PresetPoint, nominatimGeocoder, presetGeocoder, reverseGeocode } from "@/lib/geocode";
-import { type HomeQuery, type HomeScope, analysisHref, homeHref, looksLikePlace, presetFor } from "@/lib/home-params";
-import { customerLabel } from "@/lib/labels";
-import { displayName, distanceLabel, distanceM, percentLabel } from "@/lib/store-view";
-import type { AreaDataset, Store } from "@/lib/stores";
-import { GEO_TIP, TAGLINE } from "@/lib/site";
+import { NOMINATIM_ON, nominatimGeocoder, presetGeocoder, reverseGeocode } from "@/lib/geocode";
+import type { HomeData, SearchState } from "@/lib/home-data";
+import { type HomeScope, type HomeSort, analysisHref, homeHref, scopeName } from "@/lib/home-params";
+import { recommend } from "@/lib/recommend";
+import { displayName, distanceLabel, distanceM } from "@/lib/store-view";
+import type { Store } from "@/lib/stores";
+import { CURATIONS, isThemeId, matchTheme, type ThemeId, THEMES, Y2030_SUB } from "@/lib/themes";
 import { setHomeContext } from "@/lib/ui-state";
-import { useVisitRecord } from "@/lib/visits";
+import { useVisits, type VisitRecord } from "@/lib/visits";
+import { Briefing } from "./Briefing";
+import { RegionChips, ThemeChips } from "./Chips";
+import { CURATION_MAX, Curation } from "./Curation";
+import { MapSection } from "./MapSection";
 import { Receipt } from "./Receipt";
+import { TasteSummary, useHydrated } from "./TasteSummary";
 
-export type SearchState = { status: "ok" | "empty" | "error"; query: string; stores: Store[] };
-export type HomeData = { query: HomeQuery; dataset: AreaDataset | null; search: SearchState | null; presets: PresetPoint[] };
+/** 추천 섹션 제목과 부제(전체 테마에서 매출 상위 1% 다음) */
+const RECO_TITLE = "내 저장 패턴과 비슷한 곳";
+const RECO_SUB = "내가 저장한 곳과 업종이 같은 매장";
 
-/** 빠른 상권 칩(사용자 지정 순서) */
-const CHIPS = ["gangnam", "yeouido", "seongsu", "euljiro", "pangyo"].map((slug) => AREAS.find((a) => a.slug === slug)!);
-/** 지도와 목록에 쓰는 가까운 후보 최대 수 */
-const MAX_NEAR = 100;
 /** 상호 검색 결과를 한 번에 보여 주는 수 */
 const SEARCH_PAGE = 8;
-/** 거리 구간: [이상, 미만) m */
-const BANDS: { label: string; min: number; max: number }[] = [
-  { label: "300m 이내", min: 0, max: 300 },
-  { label: "300~600m", min: 300, max: 600 },
-  { label: "600m~1km", min: 600, max: 1000 },
-  { label: "1km 이상", min: 1000, max: Number.POSITIVE_INFINITY },
-];
+/** 마지막으로 본 지역(이름만, 좌표 없음). 사용자가 직접 고른 지역만 남긴다 */
+const LAST_REGION_KEY = "eatsy:last-region";
 
+// 위치를 못 받았을 때 안내. 까닭과 다음 행동만 적는다. 어느 경우든 보던 지역은 그대로 둔다.
 const LOCATE_FAIL: Record<LocateError | "geocode", string> = {
-  denied: "위치 권한이 거부되어 보던 지역을 유지합니다. 동네 이름으로 검색할 수 있습니다.",
-  timeout: "위치 확인 시간이 지나 보던 지역을 유지합니다. 동네 이름으로 검색할 수 있습니다.",
-  unsupported: "이 브라우저에서는 위치를 쓸 수 없어 보던 지역을 유지합니다.",
-  unavailable: "위치를 확인하지 못해 보던 지역을 유지합니다. 동네 이름으로 검색할 수 있습니다.",
-  geocode: "지금 위치 근처는 아직 준비된 상권이 없습니다. 동네 이름으로 검색해 주세요.",
+  blocked: "이 사이트의 위치 사용이 꺼져 있습니다. 주소창의 사이트 설정에서 위치를 허용한 뒤 내 위치를 다시 눌러 주세요.",
+  off: "위치를 받지 못했습니다. 기기의 위치 서비스가 켜져 있는지 확인한 뒤 내 위치를 다시 눌러 주세요.",
+  timeout: "위치를 찾는 데 시간이 오래 걸려 멈췄습니다. 잠시 뒤 내 위치를 다시 눌러 주세요.",
+  unsupported: "이 브라우저에서는 위치를 쓸 수 없습니다. 지역을 직접 입력해 주세요.",
+  unavailable: "지금은 위치를 확인하지 못했습니다. 잠시 뒤 내 위치를 다시 눌러 주세요.",
+  geocode: "지금 위치 근처는 아직 준비된 상권이 없습니다. 지역을 직접 입력해 주세요.",
 };
 
-type Origin = { point: { lat: number; lng: number }; label: string } | null;
-type Evidence = { store: Store; kind: EvidenceKind | "mine" };
+type Point = { lat: number; lng: number };
+type Origin = { point: Point; label: string } | null;
 
-function centroid(stores: Store[]): { lat: number; lng: number } | null {
+function centroid(stores: Store[]): Point | null {
   const pts = stores.filter((s) => s.lat !== null && s.lng !== null);
   if (pts.length === 0) return null;
   return { lat: pts.reduce((a, s) => a + (s.lat as number), 0) / pts.length, lng: pts.reduce((a, s) => a + (s.lng as number), 0) / pts.length };
 }
 
-function bandOf(d: number): number {
-  return BANDS.findIndex((b) => d >= b.min && d < b.max);
+/** 지금 주소에 사용자가 고른 조건(상권, 동네, 검색어, 영수증)이 있는가. t, fr, s, d는 지역 조건으로 보지 않는다 */
+function urlHasChoice(): boolean {
+  const p = new URLSearchParams(window.location.search);
+  return ["area", "loc", "q", "id"].some((k) => p.has(k));
+}
+
+/** 주소의 일부 값만 바꾼다(나머지는 그대로). push면 뒤로 가기로 돌아올 수 있다. 서버를 다시 부르지 않는다 */
+function patchUrl(patch: Record<string, string | null>, push = false) {
+  const p = new URLSearchParams(window.location.search);
+  for (const [k, v] of Object.entries(patch)) {
+    if (v === null) p.delete(k);
+    else p.set(k, v);
+  }
+  const qs = p.toString();
+  const url = qs ? `/?${qs}` : "/";
+  if (url === `${window.location.pathname}${window.location.search}`) return;
+  if (push) window.history.pushState(null, "", url);
+  else window.history.replaceState(null, "", url);
+}
+
+function readLastRegion(): HomeScope | null {
+  try {
+    const raw = window.localStorage.getItem(LAST_REGION_KEY);
+    if (!raw) return null;
+    const v = JSON.parse(raw) as { area?: unknown; loc?: unknown };
+    if (typeof v.area === "string") {
+      const a = areaBySlug(v.area);
+      return a ? { kind: "area", slug: a.slug, name: a.name } : null;
+    }
+    if (typeof v.loc === "string" && v.loc.length > 0 && v.loc.length <= 30) return { kind: "loc", loc: v.loc };
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function writeLastRegion(scope: HomeScope) {
+  try {
+    window.localStorage.setItem(LAST_REGION_KEY, JSON.stringify(scope.kind === "area" ? { area: scope.slug } : { loc: scope.loc }));
+  } catch {
+    // 저장소를 못 쓰면 예시 지역으로 시작한다
+  }
 }
 
 export function HomeView({ data }: { data: HomeData }) {
-  const { query: h, dataset, search, presets } = data;
+  const { query: h, dataset, search, presets, place } = data;
   const router = useRouter();
+  const sp = useSearchParams();
   const geo = useGeo();
   const [isPending, startTransition] = useTransition();
-  const [exclude, setExclude] = useState(h.excludeFranchise);
-  const [band, setBand] = useState<number | null>(h.band);
+
+  // 테마, 프랜차이즈 제외, 정렬은 주소가 정본이다(공유와 뒤로 가기). 바꿀 때는 주소만 고치고 서버를 부르지 않는다.
+  const tRaw = sp.get("t");
+  const theme: ThemeId = isThemeId(tRaw) ? tRaw : "all";
+  const exclude = sp.get("fr") !== "0";
+  const sort: HomeSort = sp.get("s") === "rank" ? "rank" : "near";
+
   const [message, setMessage] = useState<string | null>(null);
+  const [denied, setDenied] = useState(false);
   const [extra, setExtra] = useState<Map<string, Store>>(() => new Map());
-  const [evidence, setEvidence] = useState<Evidence | null>(null);
+  const [peakOpen, setPeakOpen] = useState(false);
   const initialSelected = useMemo(() => {
     if (h.id) return h.id;
     // 상호 검색이 한 곳으로 좁혀지면(프랜차이즈 제외를 적용한 뒤) 영수증을 바로 연다.
@@ -76,9 +124,11 @@ export function HomeView({ data }: { data: HomeData }) {
     if (shownSearch.length === 1) return shownSearch[0].id;
     return null;
   }, [h.id, h.excludeFranchise, search]);
+  /** 영수증을 연 매장 */
   const [selectedId, setSelectedId] = useState<string | null>(initialSelected);
-  const [mapPick, setMapPick] = useState<string | null>(null);
   const lastTrigger = useRef<HTMLElement | null>(null);
+  /** 사용자가 직접 조건을 골랐다. 늦게 끝난 자동 내 주변 확인이 이를 덮지 않게 한다 */
+  const userPicked = useRef(false);
 
   // 이동 대기 표시는 트랜지션이 진행 중일 때만 켠다.
   useEffect(() => {
@@ -91,67 +141,82 @@ export function HomeView({ data }: { data: HomeData }) {
 
   const scope: HomeScope = h.scope;
   const nearShown = h.near && geo.me !== null;
-  const q = h.q ?? h.foodTerm;
-
-  // 상태를 URL에만 반영한다(history). 서버를 다시 부르지 않는다.
-  const syncUrl = useCallback(
-    (o: { id?: string | null; exclude?: boolean; band?: number | null }) => {
-      const href = homeHref(scope, {
-        near: nearShown,
-        q,
-        id: o.id === undefined ? selectedId : o.id,
-        excludeFranchise: o.exclude ?? exclude,
-        band: o.band === undefined ? band : o.band,
-      });
-      // 예시 상권(쿼리 없는 첫 진입)은 area를 붙이지 않는다. 새로고침해도 예시 표기와 진입 시 위치 확인이 유지된다.
-      const out = h.isDefault ? href.replace(/^\/\?area=[^&]*&?/, "/?").replace(/\?$/, "") || "/" : href;
-      window.history.replaceState(window.history.state, "", out);
-    },
-    [scope, nearShown, q, h.isDefault, selectedId, exclude, band],
-  );
 
   // ----- 내 주변 -----
   const locate = useCallback(
     async (mode: "auto" | "click") => {
       if (getGeo().locating) return;
       setGeo({ locating: true });
-      if (mode === "click") setMessage(null);
-      let pos: { lat: number; lng: number };
+      if (mode === "click") {
+        setMessage(null);
+        setDenied(false);
+        userPicked.current = true;
+      }
+      let pos: Point;
       try {
         pos = await currentPosition();
       } catch (e) {
         setGeo({ locating: false });
-        setMessage(LOCATE_FAIL[(e as LocateError) in LOCATE_FAIL ? (e as LocateError) : "unavailable"]);
+        const err = (e as LocateError) in LOCATE_FAIL ? (e as LocateError) : "unavailable";
+        // 자동 확인이 실패하면 조용히 지나간다(사용자가 누르지 않았다). 버튼의 사선도 누른 뒤에만 켠다.
+        if (mode === "click") {
+          if (err === "blocked" || err === "off") setDenied(true);
+          setMessage(LOCATE_FAIL[err]);
+        }
         return;
       }
       const chain = NOMINATIM_ON ? [nominatimGeocoder, presetGeocoder(presets)] : [presetGeocoder(presets)];
-      const place = await reverseGeocode(pos.lat, pos.lng, chain);
-      if (!place || (!place.presetSlug && !place.dong && !place.gu)) {
+      const found = await reverseGeocode(pos.lat, pos.lng, chain);
+      // 자동 확인 중에 사용자가 지역을 직접 골랐으면 덮어쓰지 않는다.
+      if (mode === "auto" && (userPicked.current || urlHasChoice())) {
         setGeo({ locating: false });
-        setMessage(LOCATE_FAIL.geocode);
         return;
       }
-      setGeo({ locating: false, me: pos, gu: place.gu, retriedGu: false });
-      const next: HomeScope = place.presetSlug
-        ? { kind: "area", slug: place.presetSlug, name: AREAS.find((a) => a.slug === place.presetSlug)?.name ?? "" }
-        : { kind: "loc", loc: (place.dong ?? place.gu) as string };
-      go(homeHref(next, { near: true, excludeFranchise: exclude }));
+      if (!found || (!found.presetSlug && !found.dong && !found.gu)) {
+        setGeo({ locating: false });
+        if (mode === "click") setMessage(LOCATE_FAIL.geocode);
+        return;
+      }
+      setGeo({ locating: false, me: pos, gu: found.gu, retriedGu: false });
+      const next: HomeScope = found.presetSlug
+        ? { kind: "area", slug: found.presetSlug, name: AREAS.find((a) => a.slug === found.presetSlug)?.name ?? "" }
+        : { kind: "loc", loc: (found.dong ?? found.gu) as string };
+      const keep = { excludeFranchise: exclude, theme, sort };
+      const href = homeHref(next, { near: true, ...keep });
+      // 이미 같은 동네를 내 주변으로 보고 있으면 위치만 갱신하고 서버를 다시 부르지 않는다.
+      if (h.near && !h.q && !h.food && href === homeHref(h.scope, { near: true, ...keep })) return;
+      go(href);
     },
-    [presets, go, exclude],
+    [presets, go, exclude, theme, sort, h.near, h.q, h.food, h.scope],
   );
 
-  // 권한이 이미 허용됐고 URL에 상권, 동네, 검색어가 없을 때만 진입 시 한 번 위치를 확인한다.
+  // 조건 없는 첫 진입: 위치 권한이 이미 있으면 내 주변으로 시작한다. 없으면 마지막으로 직접 고른 지역, 그것도 없으면 예시 지역 그대로.
   useEffect(() => {
     if (!h.isDefault || h.q || h.id || getGeo().autoChecked) return;
     setGeo({ autoChecked: true });
     let alive = true;
     geolocationGranted().then((ok) => {
-      if (alive && ok) void locate("auto");
+      if (!alive || userPicked.current || urlHasChoice()) return;
+      if (ok) {
+        void locate("auto");
+        return;
+      }
+      const last = readLastRegion();
+      if (last && homeHref(last) !== homeHref(h.scope)) {
+        const p = new URLSearchParams(window.location.search);
+        go(homeHref(last, { excludeFranchise: p.get("fr") !== "0", theme: isThemeId(p.get("t")) ? (p.get("t") as ThemeId) : "all", sort: p.get("s") === "rank" ? "rank" : "near" }), true);
+      }
     });
     return () => {
       alive = false;
     };
-  }, [h.isDefault, h.q, h.id, locate]);
+  }, [h.isDefault, h.q, h.id, h.scope, locate, go]);
+
+  // 사용자가 직접 고른 지역(예시, 내 주변, 매장 이름 검색이 아닌 것)만 기기에 남긴다. 이름만 쓴다.
+  useEffect(() => {
+    if (h.isDefault || h.near || !dataset || dataset.stores.length === 0) return;
+    writeLastRegion(h.scope);
+  }, [h.isDefault, h.near, h.scope, dataset]);
 
   // 동 조회가 0건이면 시군구로 한 번 다시 조회한다.
   useEffect(() => {
@@ -159,33 +224,24 @@ export function HomeView({ data }: { data: HomeData }) {
     const g = getGeo();
     if (!g.gu || g.retriedGu || (scope.kind === "loc" && scope.loc === g.gu)) return;
     setGeo({ retriedGu: true });
-    go(homeHref({ kind: "loc", loc: g.gu }, { near: true, excludeFranchise: exclude }), true);
-  }, [h.near, dataset, scope, go, exclude]);
+    go(homeHref({ kind: "loc", loc: g.gu }, { near: true, excludeFranchise: exclude, theme, sort }), true);
+  }, [h.near, dataset, scope, go, exclude, theme, sort]);
 
-  // ----- 후보 집합: 중복 정리된 조회 결과 → 프랜차이즈 필터 → 거리 → 거리 구간 → 가까운 순 최대 100곳 -----
+  // ----- 후보 집합 하나: 지역 조회 결과 → 프랜차이즈 제외. 브리핑, 큐레이션, 지도와 목록이 모두 여기서 나온다 -----
   const all = useMemo(() => dataset?.stores ?? [], [dataset]);
-  const visible = useMemo(() => (exclude ? all.filter((s) => !s.franchise) : all), [all, exclude]);
-  const hiddenCount = all.length - visible.length;
+  const pool = useMemo(() => (exclude ? all.filter((s) => !s.franchise) : all), [all, exclude]);
+  const themed = useMemo(() => (theme === "all" ? pool : pool.filter((s) => matchTheme(s, theme))), [pool, theme]);
+  const brief = useMemo(() => briefingOf(pool), [pool]);
 
+  // 거리 기준점: 내 주변이면 내 위치, 역이나 장소 검색이면 그 장소, 프리셋이면 상권 중심, 그 밖은 조회 결과 중심.
   const origin: Origin = useMemo(() => {
-    if (geo.me) return { point: geo.me, label: "내 위치 기준" };
-    if (dataset?.center) return { point: dataset.center, label: `${dataset.title} 중심 기준` };
+    if (nearShown && geo.me) return { point: geo.me, label: "내 위치" };
+    if (dataset?.center) return { point: dataset.center, label: place ? place.name : `${dataset.title} 중심` };
     const c = centroid(all);
-    return c ? { point: c, label: "조회 결과 중심 기준" } : null;
-  }, [geo.me, dataset, all]);
-
-  const placed = useMemo(() => {
-    if (!origin) return [];
-    return visible
-      .map((s, i) => ({ s, i, d: distanceM(origin.point, s) }))
-      .filter((r): r is { s: Store; i: number; d: number } => r.d !== null)
-      .sort((a, b) => a.d - b.d || a.i - b.i);
-  }, [visible, origin]);
-  const noCoords = visible.length - placed.length;
-  const bandCounts = useMemo(() => BANDS.map((_, k) => placed.filter((r) => bandOf(r.d) === k).length), [placed]);
-  const near = useMemo(() => (band === null ? placed : placed.filter((r) => bandOf(r.d) === band)).slice(0, MAX_NEAR), [placed, band]);
-  const nearStores = useMemo(() => near.map((r) => r.s), [near]);
-  const filteredTotal = band === null ? placed.length : bandCounts[band];
+    return c ? { point: c, label: "조회 결과 중심" } : null;
+  }, [nearShown, geo.me, dataset, place, all]);
+  const focus: Point | null = nearShown && geo.me ? geo.me : (dataset?.center ?? null);
+  const distanceOf = useCallback((s: Store) => (origin ? distanceM(origin.point, s) : null), [origin]);
 
   const byId = useMemo(() => {
     const m = new Map<string, Store>();
@@ -196,217 +252,281 @@ export function HomeView({ data }: { data: HomeData }) {
   }, [all, search, extra]);
   const selected = selectedId ? (byId.get(selectedId) ?? null) : null;
 
-  const open = useCallback(
-    (id: string) => {
-      lastTrigger.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-      setEvidence(null);
-      setSelectedId(id);
-      setMapPick(id);
-      syncUrl({ id });
-    },
-    [syncUrl],
-  );
-  const openStore = useCallback(
-    (store: Store) => {
-      setExtra((m) => (m.has(store.id) ? m : new Map(m).set(store.id, store)));
-      open(store.id);
-    },
-    [open],
-  );
+  /** 결제 영수증을 연다(카드, 목록, 핀, 검색 결과, 내 저장 어디서 열든 같은 것 하나) */
+  const openStore = useCallback((store: Store, trigger?: HTMLElement | null) => {
+    lastTrigger.current = trigger ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
+    setExtra((m) => (m.has(store.id) ? m : new Map(m).set(store.id, store)));
+    setPeakOpen(false);
+    setSelectedId(store.id);
+    patchUrl({ id: store.id });
+  }, []);
   const close = useCallback(() => {
     setSelectedId(null);
-    syncUrl({ id: null });
+    setPeakOpen(false);
+    patchUrl({ id: null });
     const t = lastTrigger.current;
     if (t && document.contains(t)) t.focus();
-  }, [syncUrl]);
+  }, []);
 
-  // 헤더의 내 기록 시트가 지금 후보와 영수증 열기를 쓴다.
-  const title = dataset
-    ? nearShown
-      ? scope.kind === "area"
-        ? `내 주변 — ${dataset.title} 상권 조회`
-        : `내 주변 — ${dataset.scopeLabel} 조회`
-      : dataset.title
-    : scope.kind === "area"
-      ? scope.name
-      : scope.loc;
+  const where = dataset ? (nearShown ? `내 주변, ${dataset.title}` : dataset.title) : scopeName(scope);
+  const region = dataset && h.food ? `${where}, ${h.food} 업종` : where;
+  /** 큐레이션 제목의 지역 이름(음식 조건과 내 주변 표시는 빼고 조회 지역만) */
+  const areaTitle = dataset?.title ?? scopeName(scope);
+
+  // 헤더의 내 저장 시트가 지금 후보와 영수증 열기를 쓴다.
+  const openFromSaves = useCallback((store: Store) => openStore(store, null), [openStore]);
   useEffect(() => {
-    setHomeContext({ stores: visible, title: dataset?.title ?? title, open: openStore });
+    setHomeContext({ stores: pool, title: region, open: openFromSaves });
     return () => setHomeContext(null);
-  }, [visible, dataset, title, openStore]);
+  }, [pool, region, openFromSaves]);
 
+  const pickTheme = (t: ThemeId) => {
+    if (t === theme) return;
+    patchUrl({ t: t === "all" ? null : t }, true);
+  };
   const toggleExclude = () => {
     const v = !exclude;
-    setExclude(v);
     // 상호 검색이 토글 뒤 한 곳으로 좁혀지면 그 영수증을 연다.
     const left = search?.status === "ok" ? search.stores.filter((st) => !(v && st.franchise)) : [];
     if (left.length === 1 && !selectedId) {
+      lastTrigger.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
       setSelectedId(left[0].id);
-      syncUrl({ exclude: v, id: left[0].id });
+      patchUrl({ fr: v ? null : "0", id: left[0].id }, true);
       return;
     }
-    syncUrl({ exclude: v });
+    patchUrl({ fr: v ? null : "0" }, true);
   };
-  const pickBand = (k: number) => {
-    const v = band === k ? null : k;
-    setBand(v);
-    syncUrl({ band: v });
+  const pickSort = useCallback((s: HomeSort) => patchUrl({ s: s === "rank" ? "rank" : null }), []);
+
+  const regionHref = (slug: string) => {
+    const a = areaBySlug(slug);
+    return homeHref({ kind: "area", slug, name: a?.name ?? "" }, { q: h.food ? h.foodTerm : null, excludeFranchise: exclude, theme, sort });
+  };
+  const onNear = () => {
+    // 이미 내 주변이면 다시 묻지 않는다.
+    if (nearShown) return;
+    void locate("click");
+  };
+  const onLocate = useCallback(() => {
+    // 이미 내 주변이면 지도가 스스로 내 위치로 맞춘다.
+    if (nearShown) return;
+    void locate("click");
+  }, [nearShown, locate]);
+  const locateState: "idle" | "locating" | "on" | "denied" = geo.locating ? "locating" : nearShown ? "on" : denied ? "denied" : "idle";
+
+  const focusSearch = () => document.getElementById("site-q")?.focus();
+  const focusRegions = () => {
+    const first = document.querySelector<HTMLElement>("#region-chips [data-testid='region-chip']");
+    first?.scrollIntoView({ block: "nearest" });
+    first?.focus();
   };
 
-  // ----- 검색: 상권 이름 → 동네 → 음식(업종) → 상호 -----
-  const [value, setValue] = useState(q ?? "");
-  const onSearch = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const v = value.replace(/\s+/g, " ").trim();
-    if (!v) return;
-    const preset = presetFor(v);
-    if (preset) return go(homeHref({ kind: "area", slug: preset, name: "" }, { excludeFranchise: exclude }));
-    if (looksLikePlace(v)) return go(homeHref({ kind: "loc", loc: v.replace(/^(.+?)\d+동$/, "$1동") }, { excludeFranchise: exclude }));
-    // 음식과 상호는 지금 범위를 유지한다(음식은 서버가 업종 조회로 읽는다).
-    go(homeHref(scope, { near: nearShown, q: v, excludeFranchise: exclude }));
-  };
+  // 지도와 목록에 보이는 수가 분석 대상 수와 다르면 무슨 수인지 적는다(지도는 위치 정보가 있는 곳만 그린다).
+  const mapped = themed.filter((s) => s.lat !== null && s.lng !== null).length;
+  const themeLabel = THEMES.find((t) => t.id === theme)?.label ?? "";
+  const mapNote =
+    theme !== "all"
+      ? `지도와 전체 매장에는 ${themeLabel} 조건에 맞는 ${themed.length}곳을 보여 줍니다${mapped < themed.length ? `. 그중 위치 정보가 있는 ${mapped}곳을 지도에 표시합니다` : ""}.`
+      : mapped < pool.length
+        ? `지도에는 위치 정보가 있는 ${mapped}곳을 표시합니다.`
+        : null;
 
-  const activeSlug = scope.kind === "area" ? scope.slug : null;
-  const where = dataset ? dataset.scopeLabel : null;
-  const countLine =
-    filteredTotal > MAX_NEAR ? `조회된 매장 ${filteredTotal}곳 중 가까운 순 ${near.length}곳` : `조회된 매장 ${near.length}곳, 가까운 순`;
+  // ----- 내 저장 패턴과 비슷한 곳 -----
+  // 기기 저장 데이터라 붙은 뒤에만 계산한다(서버 렌더에는 추천 섹션이 없다).
+  // 화면 방문 동안 고정: 지금 후보(지역, 음식, 프랜차이즈)와 테마가 바뀔 때만 그 순간의 저장 기록으로 다시 계산한다.
+  // 그래서 카드의 북마크를 눌러도 추천과 섹션 배정이 바뀌지 않고, 누른 카드는 그 자리에 남아 포커스를 잃지 않는다.
+  // 요약(TasteSummary)의 수와 저장 패턴은 바로 바뀐다.
+  const hydrated = useHydrated();
+  const { records } = useVisits();
+  const [frozen, setFrozen] = useState<{ pool: Store[]; theme: ThemeId; records: VisitRecord[] } | null>(null);
+  if (hydrated && (frozen === null || frozen.pool !== pool || frozen.theme !== theme)) {
+    setFrozen({ pool, theme, records: Object.values(records) });
+  }
+  const recoRecords = frozen && frozen.pool === pool && frozen.theme === theme ? frozen.records : null;
+
+  // 전체 테마: 섹션 순서대로 카드를 배정하고, 앞 섹션에 실은 매장은 뒤 섹션에서 뺀다(화면 폭과 무관).
+  // 추천은 매출 상위 1%에 실제 배정된 매장을 후보에서 뺀 뒤 부른다. 그래야 추천 칸이 겹침으로 줄지 않고 다음 후보로 찬다.
+  // 테마를 고르면 그 조건의 매장을 중복 제거 없이 싣고, 추천도 그 조건의 후보에서 고른다. 지도와 전체 매장은 언제나 조건에 맞는 전부다.
+  const { sections, reasons } = useMemo(() => {
+    type Sec = { theme: ThemeId | SectionId; title: string; sub: string; list: Store[]; total: number; shownElsewhere: number };
+    const qualified = new Map(CURATIONS.map((c) => [c.theme, pool.filter((st) => matchTheme(st, c.theme))]));
+    const top1Ids = new Set(theme === "all" ? assignSections({ top1: qualified.get("top1") }, CURATION_MAX).top1.map((st) => st.id) : []);
+    const rec = recoRecords ? recommend((theme === "all" ? pool : themed).filter((st) => !top1Ids.has(st.id)), recoRecords) : null;
+    const recoStores = rec?.items.map((it) => it.store) ?? [];
+    const reasonMap = new Map(rec?.items.map((it) => [it.store.id, it.reason]) ?? []);
+    const recoSec = (list: Store[]): Sec => ({ theme: "reco", title: RECO_TITLE, sub: rec?.note ? `${RECO_SUB}. ${rec.note}` : RECO_SUB, list, total: list.length, shownElsewhere: 0 });
+
+    if (theme !== "all") {
+      const c = CURATIONS.find((x) => x.theme === theme);
+      const out: Sec[] = [{ theme, title: c?.title(areaTitle) ?? themeLabel, sub: c?.sub ?? Y2030_SUB, list: themed.slice(0, CURATION_MAX), total: themed.length, shownElsewhere: 0 }, recoSec(recoStores)];
+      return { sections: out.filter((x) => x.list.length > 0), reasons: reasonMap };
+    }
+    const assigned = assignSections({ ...Object.fromEntries(qualified), reco: recoStores }, CURATION_MAX);
+    const before = new Set<string>();
+    const out: Sec[] = [];
+    for (const id of SECTION_ORDER) {
+      const list = assigned[id];
+      if (id === "reco") {
+        if (list.length > 0) out.push(recoSec(list));
+      } else {
+        const c = CURATIONS.find((x) => x.theme === id);
+        const q = qualified.get(id) ?? [];
+        if (c && list.length > 0) out.push({ theme: id, title: c.title(areaTitle), sub: c.sub, list, total: q.length, shownElsewhere: q.filter((st) => before.has(st.id)).length });
+      }
+      for (const st of list) before.add(st.id);
+    }
+    return { sections: out, reasons: reasonMap };
+  }, [theme, themed, pool, areaTitle, themeLabel, recoRecords]);
 
   return (
-    <div className="home__in">
-      <section className="ctl" aria-label="검색과 상권">
-        <p className="ctl__lede">{TAGLINE}</p>
-        <form className="ctl__search" action="/" method="get" role="search" onSubmit={onSearch}>
-          {scope.kind === "area" ? <input type="hidden" name="area" value={scope.slug} /> : <input type="hidden" name="loc" value={scope.loc} />}
-          <label htmlFor="q" className="visually-hidden">
-            음식, 가게, 동네 검색
-          </label>
-          <input
-            id="q"
-            name="q"
-            type="search"
-            inputMode="search"
-            autoComplete="off"
-            enterKeyHint="search"
-            maxLength={40}
-            placeholder="음식, 가게, 동네 검색"
-            className="input ctl__input"
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-          />
-          <button
-            type="button"
-            className="btn btn--quiet ctl__near"
-            onClick={() => void locate("click")}
-            aria-busy={geo.locating ? "true" : undefined}
-            disabled={geo.locating}
-            title={GEO_TIP}
-            aria-describedby="geo-tip"
-          >
-            {geo.locating ? "확인 중" : "내 주변 보기"}
-          </button>
-          <span id="geo-tip" className="visually-hidden">
-            {GEO_TIP}
-          </span>
-        </form>
-        <div className="chips" role="group" aria-label="빠른 상권">
-          {CHIPS.map((a) => (
-            <NavLink key={a.slug} href={homeHref({ kind: "area", slug: a.slug, name: a.name }, { excludeFranchise: exclude })} className="chip" current={activeSlug === a.slug && !nearShown && !h.food}>
-              {a.name}
-            </NavLink>
-          ))}
-        </div>
-        {message ? (
-          <p className="ctl__msg" role="status">
+    <div className="feed">
+      <h1 className="visually-hidden">{region} 결제 데이터로 고르는 가게</h1>
+      <div className="feed__filters">
+        <RegionChips activeSlug={scope.kind === "area" ? scope.slug : null} near={nearShown} locating={geo.locating} hrefFor={regionHref} onNear={onNear} />
+        <ThemeChips theme={theme} onTheme={pickTheme} exclude={exclude} onExclude={toggleExclude} />
+      </div>
+
+      {message ? (
+        <div className="feed__msg">
+          <p className="feed__msg-text" role="status">
             {message}
           </p>
-        ) : null}
-      </section>
+          <div className="feed__msg-act">
+            <button type="button" className="link link--btn" onClick={focusSearch}>
+              지역 직접 입력
+            </button>
+            <button
+              type="button"
+              className="feed__close"
+              onClick={() => {
+                setMessage(null);
+                focusRegions();
+              }}
+              aria-label="위치 안내 닫기"
+            >
+              닫기
+            </button>
+          </div>
+        </div>
+      ) : null}
 
-      {search ? <SearchResults search={search} scope={scope} exclude={exclude} origin={origin} onPick={openStore} onShowChains={toggleExclude} selectedId={selectedId} /> : null}
+      <p className="feed__loading" role="status">
+        결제 데이터를 불러오는 중입니다.
+      </p>
+
+      {search ? <SearchResults search={search} region={region} exclude={exclude} distanceOf={distanceOf} onPick={openStore} onShowChains={toggleExclude} selectedId={selectedId} /> : null}
 
       {!dataset ? (
         <div className="state state--error" role="alert">
-          <h1 className="state__h">결제 데이터를 불러오지 못했습니다.</h1>
-          <p>잇플 조회가 실패했습니다. 잠시 뒤 다시 시도하거나 다른 상권을 눌러 보세요.</p>
+          <h2 className="state__h">결제 데이터를 불러오지 못했습니다.</h2>
+          <p>{scopeName(scope)} 조회가 실패했습니다. 잠시 뒤 다시 시도하거나 다른 지역을 골라 보세요.</p>
+          <button type="button" className="btn btn--quiet" onClick={focusRegions}>
+            지역 바꾸기
+          </button>
+        </div>
+      ) : all.length === 0 ? (
+        <div className="state">
+          <h2 className="state__h">{h.food ? `${scopeName(scope)}에서 ${h.food} 업종 가게를 찾지 못했습니다.` : `${scopeName(scope)}에서 결제 데이터를 찾지 못했습니다.`}</h2>
+          <p>
+            지금 조건: 지역 {scopeName(scope)}
+            {h.food ? `, 음식 ${h.foodTerm}` : ""}. 다른 지역을 고르거나 검색어를 바꿔 보세요.
+          </p>
+          <button type="button" className="btn btn--quiet" onClick={focusRegions}>
+            지역 바꾸기
+          </button>
+        </div>
+      ) : pool.length === 0 ? (
+        <div className="state">
+          <h2 className="state__h">프랜차이즈를 빼면 남는 곳이 없습니다.</h2>
+          <p>
+            {region}에서 조회한 {all.length}곳이 모두 프랜차이즈로 판정됐습니다. 프랜차이즈 제외를 끄면 같은 조회 결과에서 다시 보입니다.
+          </p>
+          <button type="button" className="btn btn--quiet" onClick={toggleExclude}>
+            프랜차이즈 제외 끄기
+          </button>
         </div>
       ) : (
-        <div className="near">
-          <section className="sum" aria-labelledby="home-title">
-            <h1 id="home-title" className="sum__title">
-              {h.food ? `${dataset.title}, ${h.food} 업종 ${visible.length}곳` : title}
-            </h1>
-            <div className="sum__row">
-              <p className="sum__sub">
-                {where}에서 {countLine}
-                {origin ? `, ${origin.label}` : ""}
-              </p>
-              <button type="button" className="toggle" aria-pressed={exclude} onClick={toggleExclude}>
-                프랜차이즈 제외
-              </button>
-            </div>
-            {exclude && hiddenCount > 0 && (h.food || all.length === hiddenCount) ? (
-              <p className="sum__hide">
-                프랜차이즈 제외가 켜져 있어 {hiddenCount}곳을 숨겼습니다. 끄면 볼 수 있습니다.{" "}
-                <button type="button" className="link link--btn" onClick={toggleExclude}>
-                  프랜차이즈 제외 끄기
-                </button>
-              </p>
-            ) : null}
-            {placed.length > 0 ? <DistanceBar counts={bandCounts} band={band} onPick={pickBand} basis={origin?.label ?? ""} /> : null}
-          </section>
+        <>
+          <div className="feed__top">
+            <Briefing region={region} example={h.isDefault && !h.q} data={brief} exclude={exclude} mapNote={mapNote} analysisHref={analysisHref(scope, h.food, exclude)} />
+            <TasteSummary />
+          </div>
 
-          {all.length === 0 ? (
-            <div className="state">
-              <h2 className="state__h">{h.food ? `이 범위에서 ${h.food} 업종 가게를 찾지 못했습니다.` : "이 범위에서 결제 데이터를 찾지 못했습니다."}</h2>
-              <p>동 이름을 바꾸거나 상권 칩을 눌러 보세요.</p>
+          {theme !== "all" && themed.length === 0 ? (
+            <div className="state" data-testid="empty-theme">
+              <h2 className="state__h">
+                {region}에서 {themeLabel} 조건에 맞는 매장이 없습니다.
+              </h2>
+              <p>테마를 해제하면 같은 지역의 매장 {pool.length}곳을 다시 볼 수 있습니다. 다른 지역에서는 결과가 있을 수 있습니다.</p>
+              <div className="state__act">
+                <button type="button" className="btn btn--primary" onClick={() => pickTheme("all")}>
+                  테마 해제
+                </button>
+                <button type="button" className="btn btn--quiet" onClick={focusRegions}>
+                  지역 바꾸기
+                </button>
+              </div>
             </div>
+          ) : sections.length === 0 ? (
+            <p className="feed__none">이 지역에는 매출 상위 1%, 동네맛집, 회식 적합에 해당하는 매장이 없습니다. 아래 지도와 전체 매장에서 확인해 보세요.</p>
           ) : (
-            <div className="near__body">
-              <div className="near__map">
-                <StoreMap stores={nearStores} selectedId={mapPick} onSelect={open} me={geo.me} height={260} />
-              </div>
-              <div className="near__list">
-                {near.length === 0 ? (
-                  <div className="state">
-                    <h2 className="state__h">{visible.length === 0 ? "프랜차이즈를 빼면 남는 곳이 없습니다." : "이 거리 구간에는 후보가 없습니다."}</h2>
-                    <p>{visible.length === 0 ? "프랜차이즈 제외를 끄면 같은 조회 결과에서 다시 보입니다." : "거리 구간을 다시 누르면 풀립니다."}</p>
-                  </div>
-                ) : (
-                  <ol className="rows" aria-label={countLine}>
-                    {near.map(({ s, d }) => (
-                      <StoreRow key={s.id} store={s} distance={distanceLabel(d)} selected={s.id === mapPick} onOpen={open} onEvidence={(kind) => setEvidence({ store: s, kind })} />
-                    ))}
-                  </ol>
-                )}
-                {noCoords > 0 ? <p className="list__src">위치 정보가 없는 {noCoords}곳은 지도와 목록에서 뺐습니다.</p> : null}
-                <NavLink href={analysisHref(scope)} className="link near__more">
-                  이 지역 상권 분석 보기
-                </NavLink>
-              </div>
-            </div>
+            sections.map((c, i) => (
+              <Curation
+                key={`${c.theme}|${region}|${exclude ? 1 : 0}`}
+                theme={c.theme}
+                title={c.title}
+                sub={c.sub}
+                stores={c.list}
+                total={c.total}
+                shownElsewhere={c.shownElsewhere}
+                distanceOf={distanceOf}
+                onOpen={openStore}
+                activeId={selectedId}
+                priority={i === 0}
+                reasons={c.theme === "reco" ? reasons : undefined}
+              />
+            ))
           )}
-        </div>
+
+          {themed.length > 0 ? (
+            <MapSection
+              stores={themed}
+              origin={origin?.point ?? null}
+              originLabel={origin?.label ?? ""}
+              focus={focus}
+              me={geo.me}
+              near={nearShown}
+              locateState={locateState}
+              onLocate={onLocate}
+              selectedId={selectedId}
+              onOpen={openStore}
+              sort={sort}
+              onSort={pickSort}
+            />
+          ) : null}
+        </>
       )}
 
-      {evidence ? (
-        <EvidenceSheet
-          evidence={evidence}
-          stores={visible}
-          scopeLabel={where ?? title}
-          onClose={() => setEvidence(null)}
-          onReceipt={() => open(evidence.store.id)}
-        />
+      {selected && peakOpen ? (
+        <Sheet kicker={evidenceLabel(selected, "peak")} title={displayName(selected.name)} onClose={() => setPeakOpen(false)}>
+          <div className="evs">
+            <EvidenceChart store={selected} kind="peak" stores={pool} scopeLabel={dataset?.scopeLabel ?? region} />
+            <MerLink merUrl={selected.merUrl} className="cta evs__cta" />
+            <button type="button" className="btn btn--quiet evs__receipt" onClick={() => setPeakOpen(false)}>
+              결제 영수증 보기
+            </button>
+          </div>
+        </Sheet>
       ) : null}
       {selected ? (
         <Receipt
           store={selected}
-          distance={origin ? distanceLabel(distanceM(origin.point, selected)) : null}
-          distanceBasis={origin?.label ?? null}
+          distance={distanceLabel(distanceOf(selected))}
+          distanceBasis={origin ? `${origin.label} 기준` : null}
           onClose={close}
           onPeak={() => {
-            const st = selected;
-            setSelectedId(null);
-            setEvidence({ store: st, kind: "peak" });
+            // 영수증은 그대로 두고 그 위에 차트 시트를 연다. Esc 한 번은 시트만, 두 번째는 영수증을 닫는다.
+            setPeakOpen(true);
           }}
         />
       ) : null}
@@ -414,165 +534,73 @@ export function HomeView({ data }: { data: HomeData }) {
   );
 }
 
-function DistanceBar({ counts, band, onPick, basis }: { counts: number[]; band: number | null; onPick: (k: number) => void; basis: string }) {
-  const max = Math.max(1, ...counts);
-  return (
-    <div className="dist" role="group" aria-label={`거리 분포, ${basis}. 구간을 누르면 지도와 목록이 좁혀집니다`}>
-      {BANDS.map((b, k) => (
-        <button
-          key={b.label}
-          type="button"
-          className="dist__seg"
-          aria-pressed={band === k}
-          disabled={counts[k] === 0 && band !== k}
-          onClick={() => onPick(k)}
-          aria-label={`${b.label} ${counts[k]}곳${band === k ? ", 선택됨" : ""}`}
-        >
-          <span className="dist__label">{b.label}</span>
-          <span className="dist__n num">{counts[k]}곳</span>
-          <span className="dist__track" aria-hidden="true">
-            <span className="dist__fill" style={{ transform: `scaleX(${counts[k] / max})` }} />
-          </span>
-        </button>
-      ))}
-    </div>
-  );
-}
-
-/** 근거 시트를 여는 태그 버튼(겉보기는 작고 히트 영역은 44px) */
-function TagButton({ label, onClick, mine = false }: { label: string; onClick: () => void; mine?: boolean }) {
-  return (
-    <button type="button" className="taghit" onClick={onClick} aria-haspopup="dialog">
-      <span className="tag tag--btn">
-        {mine ? <span className="tag__dot" aria-hidden="true" /> : null}
-        {label}
-        <span className="tag__chev" aria-hidden="true" />
-      </span>
-    </button>
-  );
-}
-
-/** 행의 태그 줄: 내가 다시 갈 곳 / 시군구 상위 N% / 고객층 1위 / 동네맛집 / 회식 적합 (있는 것만) */
-function RowTags({ store, onEvidence }: { store: Store; onEvidence: (kind: EvidenceKind | "mine") => void }) {
-  const rec = useVisitRecord(store.id);
-  const mine = Boolean(rec && rec.reaction === "again" && rec.visits.length > 0);
-  const cust = store.customers[0] ? customerLabel(store.customers[0]) : null;
-  const tags: React.ReactNode[] = [];
-  if (mine) tags.push(<TagButton key="mine" label="내가 다시 갈 곳" mine onClick={() => onEvidence("mine")} />);
-  if (store.ccgRank !== null) tags.push(<TagButton key="rank" label={`${store.sigungu} 상위 ${percentLabel(store.ccgRank)}`} onClick={() => onEvidence("rank")} />);
-  if (cust) tags.push(<span key="cust" className="tag tag--text">{cust} 1위</span>);
-  if (store.local === true) tags.push(<TagButton key="local" label="동네맛집" onClick={() => onEvidence("local")} />);
-  if (store.hoesik === true) tags.push(<TagButton key="hoesik" label="회식 적합" onClick={() => onEvidence("hoesik")} />);
-  if (tags.length === 0) return null;
-  return <div className="row__tags">{tags}</div>;
-}
-
-function StoreRow({
-  store,
-  distance,
-  selected,
-  onOpen,
-  onEvidence,
-}: {
-  store: Store;
-  distance: string | null;
-  selected: boolean;
-  onOpen: (id: string) => void;
-  onEvidence: (kind: EvidenceKind | "mine") => void;
-}) {
-  return (
-    <li className="row" data-selected={selected ? "true" : undefined} data-id={store.id}>
-      <button type="button" className="row__name" onClick={() => onOpen(store.id)} aria-haspopup="dialog">
-        {displayName(store.name)}
-      </button>
-      <p className="row__meta">
-        {distance ? <span className="num">{distance}</span> : null}
-        {distance ? ", " : ""}
-        {store.category}
-      </p>
-      <RowTags store={store} onEvidence={onEvidence} />
-      <MerLink merUrl={store.merUrl} className="cta row__cta" />
-    </li>
-  );
-}
-
-function EvidenceSheet({ evidence, stores, scopeLabel, onClose, onReceipt }: { evidence: Evidence; stores: Store[]; scopeLabel: string; onClose: () => void; onReceipt: () => void }) {
-  const { store, kind } = evidence;
-  return (
-    <Sheet kicker={kind === "mine" ? "내가 남긴 방문 기록" : evidenceLabel(store, kind)} title={displayName(store.name)} onClose={onClose}>
-      <div className="evs">
-        {kind === "mine" ? <StoreSignalDetail store={store} /> : <EvidenceChart store={store} kind={kind} stores={stores} scopeLabel={scopeLabel} />}
-        <MerLink merUrl={store.merUrl} className="cta evs__cta" />
-        <button type="button" className="btn btn--quiet evs__receipt" onClick={onReceipt}>
-          결제 영수증 보기
-        </button>
-      </div>
-    </Sheet>
-  );
-}
-
 function SearchResults({
   search,
-  scope,
+  region,
   exclude,
-  origin,
+  distanceOf,
   onPick,
   onShowChains,
   selectedId,
 }: {
   search: SearchState;
-  scope: HomeScope;
+  region: string;
   exclude: boolean;
-  origin: Origin;
-  onPick: (s: Store) => void;
+  distanceOf: (s: Store) => number | null;
+  onPick: (s: Store, trigger: HTMLElement) => void;
   onShowChains: () => void;
   selectedId: string | null;
 }) {
-  const clear = homeHref(scope, { excludeFranchise: exclude });
   const [more, setMore] = useState(SEARCH_PAGE);
   const filtered = exclude ? search.stores.filter((s) => !s.franchise) : search.stores;
   const hidden = search.stores.length - filtered.length;
   // 지점이 여럿이면 지금 거리 기준에서 가까운 순으로 보여 준다.
-  const shown = origin
-    ? filtered
-        .map((s, i) => ({ s, i, d: distanceM(origin.point, s) }))
-        .sort((a, b) => (a.d ?? Number.POSITIVE_INFINITY) - (b.d ?? Number.POSITIVE_INFINITY) || a.i - b.i)
-        .map((r) => r.s)
-    : filtered;
+  const shown = filtered
+    .map((s, i) => ({ s, i, d: distanceOf(s) }))
+    .sort((a, b) => (a.d ?? Number.POSITIVE_INFINITY) - (b.d ?? Number.POSITIVE_INFINITY) || a.i - b.i);
   return (
-    <section className="found" aria-labelledby="found-h">
+    <section className="found" aria-labelledby="found-h" data-testid="search-results">
       <div className="found__head">
         <h2 id="found-h" className="found__h">
-          {search.status === "error" ? `${search.query} 검색 실패` : search.status === "empty" ? `${search.query} 검색 결과 없음` : `${search.query} 검색 ${shown.length}곳`}
+          {search.status === "error"
+            ? `${search.query} 검색 실패`
+            : search.status === "empty"
+              ? `${search.query} 검색 결과 없음`
+              : shown.length === 0
+                ? `${search.query} 검색, 프랜차이즈 ${hidden}곳 숨김`
+                : `${search.query} 검색 ${shown.length}곳`}
         </h2>
-        <NavLink href={clear} className="link">
+        <NavLink href="/" className="link">
           검색 지우기
         </NavLink>
       </div>
       {search.status === "error" ? (
         <p className="found__p" role="alert">
-          매장 검색 조회가 실패했습니다. 잠시 뒤 다시 시도해 주세요. 지금 지역 목록은 그대로입니다.
+          가게 검색이 실패했습니다. 잠시 뒤 다시 시도해 주세요. 아래 피드는 {region}입니다.
         </p>
       ) : search.status === "empty" ? (
-        <p className="found__p">이 이름의 가게를 찾지 못했습니다. 이름을 줄이거나 동 이름과 함께 검색해 보세요.</p>
+        <p className="found__p">이 이름의 가게를 찾지 못했습니다. 이름을 줄이거나 동네, 역 이름과 함께 검색해 보세요. 아래 피드는 {region}입니다.</p>
       ) : (
         <>
           {hidden > 0 ? (
             <p className="found__p">
-              프랜차이즈 제외가 켜져 있어 {hidden}곳을 숨겼습니다. 끄면 볼 수 있습니다.{" "}
+              프랜차이즈 제외가 켜져 있어 {hidden}곳을 숨겼습니다.{" "}
               <button type="button" className="link link--btn" onClick={onShowChains}>
                 프랜차이즈 제외 끄기
               </button>
             </p>
           ) : null}
-          {shown.length > 1 ? <p className="found__p">지점이 여러 곳입니다. 가까운 순으로 보여 드립니다. 주소를 보고 고르세요.</p> : null}
+          {shown.length > 1 ? <p className="found__p">지점이 여러 곳입니다. 지역과 주소를 보고 고르세요.</p> : null}
           {shown.length > 0 ? (
             <ul className="found__list">
-              {shown.slice(0, more).map((s) => (
+              {shown.slice(0, more).map(({ s, d }) => (
                 <li key={s.id}>
-                  <button type="button" className="found__btn" aria-pressed={s.id === selectedId} onClick={() => onPick(s)}>
+                  <button type="button" className="found__btn" aria-pressed={s.id === selectedId} aria-haspopup="dialog" onClick={(e) => onPick(s, e.currentTarget)}>
                     <span className="found__name">{displayName(s.name)}</span>
-                    <span className="found__addr">{s.address}</span>
+                    <span className="found__addr">
+                      {s.address || s.sigungu}
+                      {d !== null ? <span className="num">, {distanceLabel(d)}</span> : null}
+                    </span>
                   </button>
                 </li>
               ))}

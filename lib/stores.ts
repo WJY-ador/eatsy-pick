@@ -5,6 +5,9 @@ import { type AreaPreset, areaBySlug } from "./areas";
 import { type EatplItem, REVALIDATE_SECONDS, type SearchFn, type SearchParams, createSearch } from "./eatpl";
 import { isFranchise, normalizeName } from "./franchise";
 import { tmToLatLng } from "./geo";
+import type { PlaceHit } from "./home-data";
+import { isAddressLike, looksLikeStation } from "./home-params";
+import { findPlace } from "./place";
 import { fetchAll, isUnnamedMerchant, sigunguOf } from "./pool";
 
 export type Store = {
@@ -22,6 +25,7 @@ export type Store = {
   peakDay: string | null; // congestionDwk: 월~일
   peakTime: string | null; // congestionTizn: 오전, 점심, 오후, 저녁, 심야, 새벽
   customers: string[]; // rk01, rk02, rk03 순서. 값 꼴 "30대남성"
+  customer1: string | null; // 원본 rk01만. 비었으면 null(rk02를 1위로 올리지 않는다). 옛 기기 스냅샷에는 없을 수 있다
   open: string | null; // srtTime "HHMM"
   close: string | null; // endTime "HHMM" (open보다 작으면 익일)
   holidays: string[]; // hldyDwk
@@ -38,7 +42,7 @@ export type AreaDataset = {
   hitLimit: boolean; // 어느 호출이든 100건이면 true
   failed: number; // 실패한 호출 수
   stores: Store[]; // 중복 정리 뒤, API 순서(시군구 매출 상위 순)
-  center: { lat: number; lng: number } | null; // 프리셋 중심
+  center: { lat: number; lng: number } | null; // 프리셋 중심, 장소 검색이면 그 장소 좌표, 그 밖은 null
 };
 
 /** API 한 호출의 최대 반환 건수(spec 2절) */
@@ -114,6 +118,7 @@ export function toStore(it: EatplItem): Store {
     peakDay: str(it.congestionDwk),
     peakTime: str(it.congestionTizn),
     customers: ["rk01", "rk02", "rk03"].map((k) => rk[k]).filter((v): v is string => typeof v === "string" && v !== ""),
+    customer1: str(rk.rk01),
     open: str(it.srtTime),
     close: str(it.endTime),
     holidays: Array.isArray(it.hldyDwk) ? it.hldyDwk.filter((d): d is string => typeof d === "string") : [],
@@ -183,16 +188,22 @@ export function cleanLoc(raw: string | undefined | null): string | null {
   return v && v.length <= LOC_MAX ? v : null;
 }
 
-type Plan = { title: string; queries: string[]; sigungu?: string[]; center: { lat: number; lng: number } | null };
+type Plan = { title: string; queries: string[]; sigungu?: string[]; center: { lat: number; lng: number } | null; place: PlaceHit | null };
 
-function planOf(input: { area?: string; loc?: string }): Plan {
+/**
+ * 조회 계획. 프리셋이면 그 동들, 주소 꼴(동, 구, 가, 시도 + 동)이면 입력 그대로,
+ * 그 밖(역이나 장소 이름)은 장소 검색으로 찾은 주소 범위(최대 3건)와 그 좌표. 장소 검색이 안 되면 입력 그대로.
+ */
+async function planOf(input: { area?: string; loc?: string }): Promise<Plan> {
   const loc = cleanLoc(input.loc);
   const preset = areaBySlug(input.area);
   if (preset || !loc) {
     const a = preset ?? areaBySlug(DEFAULT_AREA_SLUG)!;
-    return { title: a.name, queries: a.dongs.slice(0, AREA_MAX_DONGS), sigungu: a.sigungu, center: presetCenter(a) };
+    return { title: a.name, queries: a.dongs.slice(0, AREA_MAX_DONGS), sigungu: a.sigungu, center: presetCenter(a), place: null };
   }
-  return { title: loc, queries: [loc], center: null };
+  const found = isAddressLike(loc) ? null : await findPlace(loc, looksLikeStation(loc));
+  if (found) return { title: loc, queries: found.ranges, center: { lat: found.hit.lat, lng: found.hit.lng }, place: found.hit };
+  return { title: loc, queries: [loc], center: null, place: null };
 }
 
 async function runQueries(queries: SearchParams[], fn: SearchFn) {
@@ -203,11 +214,15 @@ async function runQueries(queries: SearchParams[], fn: SearchFn) {
 /**
  * 상권 조회. area(프리셋 slug)면 그 프리셋의 동 앞 3개를 location만으로 조회하고 허용 시군구로 거른다.
  * category(업종)를 주면 같은 location × 그 업종 1개로 조회한다(음식 검색).
- * loc(자유 입력)이면 그 값 1건. 0건이면 빈 dataset, 호출이 전부 실패하면 throw.
- * 응답은 Next fetch 캐시가 21600초 동안 재사용한다.
+ * loc(자유 입력)이면 주소 꼴은 그 값 1건, 역이나 장소 이름은 장소 검색으로 찾은 주소 범위(최대 3건).
+ * 0건이면 빈 dataset, 호출이 전부 실패하면 throw. 응답은 Next fetch 캐시가 21600초 동안 재사용한다.
+ * place는 장소 검색으로 찾은 기준점(없으면 null).
  */
-export async function loadArea(input: { area?: string; loc?: string; category?: string }, fn: SearchFn = search): Promise<AreaDataset> {
-  const plan = planOf(input);
+export async function loadAreaWithPlace(
+  input: { area?: string; loc?: string; category?: string },
+  fn: SearchFn = search,
+): Promise<{ dataset: AreaDataset; place: PlaceHit | null }> {
+  const plan = await planOf(input);
   // category가 있으면 같은 location마다 그 업종 하나만 조회한다(호출 수는 그대로 3건 이하).
   const params: SearchParams[] = plan.queries.map((location) => (input.category ? { location, merTpbuzNm: input.category } : { location }));
   const settled = await Promise.allSettled(params.map((p) => fn(p)));
@@ -219,15 +234,23 @@ export async function loadArea(input: { area?: string; loc?: string; category?: 
   }
   const items = ok.flatMap((s) => s.value);
   return {
-    scopeLabel: plan.queries.join(", "),
-    title: plan.title,
-    queries: plan.queries,
-    returned: items.length,
-    hitLimit: ok.some((s) => s.value.length >= API_LIMIT),
-    failed,
-    stores: normalizeItems(items, plan.sigungu),
-    center: plan.center,
+    dataset: {
+      scopeLabel: plan.queries.join(", "),
+      title: plan.title,
+      queries: plan.queries,
+      returned: items.length,
+      hitLimit: ok.some((s) => s.value.length >= API_LIMIT),
+      failed,
+      stores: normalizeItems(items, plan.sigungu),
+      center: plan.center,
+    },
+    place: plan.place,
   };
+}
+
+/** 상권 조회(기준점 없이 dataset만). 상권 분석과 공유 카드가 쓴다 */
+export async function loadArea(input: { area?: string; loc?: string; category?: string }, fn: SearchFn = search): Promise<AreaDataset> {
+  return (await loadAreaWithPlace(input, fn)).dataset;
 }
 
 // ---------- 매장 검색(홈) ----------

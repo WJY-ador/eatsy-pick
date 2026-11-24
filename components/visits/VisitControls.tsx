@@ -22,8 +22,8 @@ function latestVisit(rec: VisitRecord) {
 
 /**
  * "다녀왔어요" → 방문 기록 + 그 자리에서 재방문 의향과 모임 유형(선택).
- * 반응과 유형은 누르는 즉시 저장한다. 이미 기록이 있으면 현재 상태와 고치기, 방문 기록 지우기(저장은 남김).
- * compact면 상태 요약과 방문 기록 지우기를 빼고 버튼만 둔다(내 기록 목록이 상태를 따로 보여 줄 때).
+ * 반응과 유형은 누르는 즉시 저장한다. 이미 기록이 있으면 방문 날짜(모임 유형), 재방문 의향과 고치기, 방문 기록 지우기(저장은 남김).
+ * compact면 상태 요약과 방문 기록 지우기를 빼고 버튼만 둔다(내 저장 목록이 상태를 따로 보여 줄 때).
  */
 export function VisitControls({ store, compact = false }: { store: Store; compact?: boolean }) {
   const { records, persistent } = useVisits();
@@ -132,16 +132,22 @@ export function VisitControls({ store, compact = false }: { store: Store; compac
           <div>
             <dt>방문</dt>
             <dd>
-              <span className={s.num}>{rec.visits.length}</span>회, 최근 {dayLabel(last.at)}
+              <span className={s.num}>{rec.visits.length}</span>회
+              <ul className={s.visitList} aria-label="방문 날짜">
+                {[...rec.visits]
+                  .sort((a, b) => (a.at < b.at ? 1 : -1))
+                  .map((v, i) => (
+                    <li key={`${v.at}-${i}`}>
+                      {dayLabel(v.at)}
+                      {v.occasion ? `, ${v.occasion}` : ""}
+                    </li>
+                  ))}
+              </ul>
             </dd>
           </div>
           <div>
             <dt>재방문 의향</dt>
             <dd>{rec.reaction ? REACTION_LABEL[rec.reaction] : "남기지 않음"}</dd>
-          </div>
-          <div>
-            <dt>모임 유형</dt>
-            <dd>{last.occasion ?? "고르지 않음"}</dd>
           </div>
         </dl>
       )}

@@ -38,7 +38,24 @@ export function useGeo(): GeoState {
   return useSyncExternalStore(subscribe, getGeo, () => INITIAL);
 }
 
-export type LocateError = "denied" | "timeout" | "unsupported" | "unavailable";
+/**
+ * 위치를 못 받은 까닭. 거부 응답(PERMISSION_DENIED)은 사이트 권한 상태로 둘로 나눈다.
+ * blocked: 이 사이트의 위치 사용이 꺼져 있다(권한 상태 denied).
+ * off: 권한 상태가 denied가 아닌데 거부 응답이 왔다. 기기나 브라우저의 위치 서비스가 꺼진 경우가 많고,
+ *      권한 창을 고르지 않고 닫았거나 앱 안 브라우저가 막은 경우도 여기로 온다.
+ */
+export type LocateError = "blocked" | "off" | "timeout" | "unsupported" | "unavailable";
+
+/** 사이트 위치 권한 상태. Permissions API가 없거나 실패하면 null */
+async function permissionState(): Promise<PermissionState | null> {
+  try {
+    if (typeof navigator === "undefined" || !navigator.permissions?.query) return null;
+    const r = await navigator.permissions.query({ name: "geolocation" as PermissionName });
+    return r.state;
+  } catch {
+    return null;
+  }
+}
 
 /** 현재 위치 한 번. 8초 안에 못 받으면 timeout */
 export function currentPosition(): Promise<{ lat: number; lng: number }> {
@@ -46,8 +63,13 @@ export function currentPosition(): Promise<{ lat: number; lng: number }> {
     if (typeof navigator === "undefined" || !("geolocation" in navigator)) return reject("unsupported" satisfies LocateError);
     navigator.geolocation.getCurrentPosition(
       (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-      (err) =>
-        reject((err.code === err.PERMISSION_DENIED ? "denied" : err.code === err.TIMEOUT ? "timeout" : "unavailable") satisfies LocateError),
+      (err) => {
+        if (err.code === err.PERMISSION_DENIED) {
+          void permissionState().then((st) => reject((st === "denied" ? "blocked" : "off") satisfies LocateError));
+          return;
+        }
+        reject((err.code === err.TIMEOUT ? "timeout" : "unavailable") satisfies LocateError);
+      },
       { timeout: 8000, maximumAge: 60_000, enableHighAccuracy: false },
     );
   });
@@ -55,11 +77,5 @@ export function currentPosition(): Promise<{ lat: number; lng: number }> {
 
 /** 권한이 이미 허용됐는가. Permissions API가 없거나 실패하면 false(묻지 않는다) */
 export async function geolocationGranted(): Promise<boolean> {
-  try {
-    if (typeof navigator === "undefined" || !navigator.permissions?.query) return false;
-    const r = await navigator.permissions.query({ name: "geolocation" as PermissionName });
-    return r.state === "granted";
-  } catch {
-    return false;
-  }
+  return (await permissionState()) === "granted";
 }

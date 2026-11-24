@@ -9,7 +9,7 @@ import { OG_COLORS as C } from "@/lib/og-theme";
 import { ATTRIBUTION, SITE_NAME } from "@/lib/site";
 import { loadArea } from "@/lib/stores";
 
-// 상권 분석 공유 카드 1200×630. /analysis와 같은 쿼리(area|loc, cat, peak, cust, fr)를 받는다.
+// 상권 분석 공유 카드 1200×630. /analysis와 같은 쿼리(area|loc, food, cat, peak, cust, local, hoesik, fr)를 받는다.
 // 어떤 경우에도 500을 내지 않는다: 조회 실패나 0곳이면 일반 카드. 폰트는 /og와 같은 방식으로 fs로 읽는다.
 export const maxDuration = 30;
 
@@ -84,9 +84,10 @@ function Metric({ label, value, sub }: { label: string; value: string; sub: stri
   );
 }
 
-function AnalysisCard({ title, scopeLabel, a }: { title: string; scopeLabel: string; a: Analysis }) {
+function AnalysisCard({ title, scopeLabel, food, a }: { title: string; scopeLabel: string; food: string | null; a: Analysis }) {
   const f = a.filters;
   const parts: string[] = [];
+  if (food) parts.push(`${food} 업종으로 조회`);
   if (f.cat) parts.push(f.cat);
   if (f.peak) {
     const { day, time } = splitPeak(f.peak);
@@ -141,7 +142,7 @@ export async function GET(request: NextRequest) {
     const dataset = await loadArea(loadInput(scope));
     if (dataset.stores.length > 0) {
       const a = analyze(dataset.stores, parseFilters(raw));
-      return await render(<AnalysisCard title={dataset.title || scopeName(scope)} scopeLabel={dataset.scopeLabel} a={a} />);
+      return await render(<AnalysisCard title={dataset.title || scopeName(scope)} scopeLabel={dataset.scopeLabel} food={scope.food ?? null} a={a} />);
     }
   } catch {
     // 아래 일반 카드로 간다.

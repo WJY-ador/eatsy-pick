@@ -15,7 +15,7 @@ export async function generateMetadata({ searchParams }: PageProps<"/analysis">)
   const raw = await searchParams;
   const { scope } = parseScope(raw);
   const f = parseFilters(raw);
-  const name = scopeName(scope);
+  const name = scope.food ? `${scopeName(scope)} ${scope.food}` : scopeName(scope);
   const title = `${name} 상권 분석 | ${SITE_NAME}`;
   const parts: string[] = [];
   if (f.cat) parts.push(f.cat);
@@ -24,7 +24,9 @@ export async function generateMetadata({ searchParams }: PageProps<"/analysis">)
     parts.push(`${day} ${time} 피크`);
   }
   if (f.cust) parts.push(f.cust);
-  const description = `${name}의 BC카드 결제 데이터로 업종, 대표 피크 요일과 시간대, 주 고객층을 나눠 봅니다.${
+  if (f.local) parts.push("동네맛집");
+  if (f.hoesik) parts.push("회식 적합");
+  const description = `${scopeName(scope)}${scope.food ? `에서 ${scope.food} 업종으로 조회한` : "의"} BC카드 결제 데이터로 업종, 대표 피크 요일과 시간대, 주 고객층을 나눠 봅니다.${
     parts.length > 0 ? ` 적용 필터: ${parts.join(", ")}.` : ""
   }`;
   const og = new URL(ogPath(scope, f), siteUrl()).href;
@@ -45,11 +47,11 @@ export async function generateMetadata({ searchParams }: PageProps<"/analysis">)
   };
 }
 
-/** 조회 결과. 상권이 바뀌면 바깥 Suspense key가 바뀌어 스켈레톤이 다시 뜨고, 필터는 새 주소 기준으로 초기화된다. */
-async function Loaded({ scope, fellBack, raw }: { scope: Scope; fellBack: boolean; raw: Record<string, string | string[] | undefined> }) {
+/** 조회 결과. 상권이 바뀌면 바깥 Suspense key가 바뀌어 스켈레톤이 다시 뜬다. 필터는 AnalysisView가 주소에서 읽는다. */
+async function Loaded({ scope, fellBack }: { scope: Scope; fellBack: boolean }) {
   // 전부 실패하면 loadArea가 throw하고 error.tsx가 받는다. 빈 결과(0곳)는 화면이 따로 그린다.
   const dataset = await loadArea(loadInput(scope));
-  return <AnalysisView dataset={dataset} scope={scope} initialFilters={parseFilters(raw)} fellBack={fellBack} />;
+  return <AnalysisView dataset={dataset} scope={scope} fellBack={fellBack} />;
 }
 
 async function AnalysisData({ searchParams }: { searchParams: PageProps<"/analysis">["searchParams"] }) {
@@ -59,7 +61,7 @@ async function AnalysisData({ searchParams }: { searchParams: PageProps<"/analys
     <div className={s.inner}>
       <AreaSwitch scope={scope} />
       <Suspense key={analysisPath(scope, null)} fallback={<Skeleton />}>
-        <Loaded scope={scope} fellBack={fellBack} raw={raw} />
+        <Loaded scope={scope} fellBack={fellBack} />
       </Suspense>
     </div>
   );

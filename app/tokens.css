@@ -4,10 +4,10 @@
   /* app scale, ratio about 1.125 */
   --text-xs: 0.75rem; --text-sm: 0.8125rem; --text-md: 0.9375rem; --text-lg: 1.0625rem; --text-xl: 1.1875rem; --text-2xl: 1.375rem;
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1); --dur-micro: 120ms; --dur-short: 220ms;
-  --container: 1280px; --gutter: 24px;
+  --container: 1200px; --gutter: 24px;
   --z-raised: 10; --z-sheet: 400; --z-sticky-nav: 300; --z-toast: 500;
 
-  /* Soft grey ground, white panels, charcoal ink, hairline rules. Blue carries data and selection, orange only the eat.pl link. */
+  /* White page, soft grey tints, charcoal ink, hairline rules. Blue carries chart data, orange the main action and the selection. */
   --color-bg: oklch(96.6% 0.003 260);
   --color-panel: oklch(99.6% 0.002 260);
   --color-ink: oklch(24% 0.012 260);
@@ -21,9 +21,16 @@
   --color-data-4: oklch(63% 0.14 256);
   --color-data-5: oklch(48% 0.16 256);
   --color-data-ink: oklch(99.6% 0.002 260);
-  --color-cta: #d23800;
-  --color-cta-press: oklch(50% 0.19 38);
-  --color-cta-ink: oklch(99.6% 0.002 260);
+  /* Orange #EA580C: the main action, the eat.pl link and the selected pin. White on it is 3.56:1, so white text sits on it
+     only when bold and 19px or larger. Smaller orange text uses --color-cta-text (5.18:1 on white), pressed fills --color-cta-press. */
+  --color-cta: #EA580C;
+  --color-cta-press: #C2410C;
+  --color-cta-ink: #FFFFFF;
+  --color-cta-text: #C2410C;
+  --color-cta-soft: #FFF7ED;
+  --color-select: #EA580C;
+  --color-select-text: #C2410C;
+  --color-select-soft: #FFF7ED;
   --color-focus: oklch(45% 0.17 256);
   --color-error: oklch(50% 0.19 27);
   --radius-panel: 12px; --radius-pill: 999px; --radius-input: 10px;

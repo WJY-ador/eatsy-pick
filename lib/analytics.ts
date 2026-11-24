@@ -17,9 +17,16 @@ export type Filters = {
   cust: string | null;
   /** 프랜차이즈 제외. 기본 true, URL fr=0이면 false */
   fr: boolean;
+  /** 동네맛집(loclPrsnPpltYn === true)만. URL local=1 */
+  local: boolean;
+  /** 회식 적합(empyVsitYn === true)만. URL hoesik=1 */
+  hoesik: boolean;
 };
 export type FilterKey = "cat" | "peak" | "cust";
-export const EMPTY_FILTERS: Filters = { cat: null, peak: null, cust: null, fr: true };
+/** KPI를 눌러 거는 조건. 이름이 Store의 필드 이름과 같다 */
+export type Flag = "local" | "hoesik";
+export const FLAGS: readonly Flag[] = ["local", "hoesik"];
+export const EMPTY_FILTERS: Filters = { cat: null, peak: null, cust: null, fr: true, local: false, hoesik: false };
 
 type RawParams = Record<string, string | string[] | undefined>;
 
@@ -43,15 +50,19 @@ export function parseFilters(raw: RawParams): Filters {
     peak: peak && PEAK_RE.test(peak) ? peak : null,
     cust: cust && /^[0-9가-힣 ]+$/.test(cust) ? cust : null,
     fr: first(raw.fr) !== "0",
+    local: first(raw.local) === "1",
+    hoesik: first(raw.hoesik) === "1",
   };
 }
 
-/** 필터를 쿼리 쌍으로. 순서는 cat, peak, cust, fr. 기본값(fr 켬, 선택 없음)은 넣지 않는다. */
+/** 필터를 쿼리 쌍으로. 순서는 cat, peak, cust, local, hoesik, fr. 기본값(fr 켬, 선택 없음)은 넣지 않는다. */
 export function filterEntries(f: Filters): [string, string][] {
   const out: [string, string][] = [];
   if (f.cat) out.push(["cat", f.cat]);
   if (f.peak) out.push(["peak", f.peak]);
   if (f.cust) out.push(["cust", f.cust]);
+  if (f.local) out.push(["local", "1"]);
+  if (f.hoesik) out.push(["hoesik", "1"]);
   if (!f.fr) out.push(["fr", "0"]);
   return out;
 }
@@ -65,10 +76,15 @@ export function splitPeak(key: string): { day: string; time: string } {
   return { day, time };
 }
 
-/** 데이터 어디에도 없는 선택값은 버린다. 공유 URL이 고친 응답과 맞지 않을 때 0곳으로 굳지 않게 하려는 것이다. */
+/**
+ * 데이터 어디에도 없는 선택값은 버린다. 공유 URL이 고친 응답과 맞지 않을 때 0곳으로 굳지 않게 하려는 것이다.
+ * KPI 조건(local, hoesik)은 버리지 않는다. 두 조건의 교집합이 0곳인 공유 주소도 같은 빈 상태를 다시 보여야 한다.
+ */
 export function sanitizeFilters(stores: Store[], f: Filters): Filters {
   return {
     fr: f.fr,
+    local: f.local,
+    hoesik: f.hoesik,
     cat: f.cat && stores.some((s) => s.category === f.cat) ? f.cat : null,
     peak: f.peak && stores.some((s) => peakKey(s) === f.peak) ? f.peak : null,
     cust: f.cust && stores.some((s) => s.customers.includes(f.cust as string)) ? f.cust : null,
@@ -80,8 +96,17 @@ export function toggleFilter(f: Filters, key: FilterKey, value: string): Filters
   return { ...f, [key]: f[key] === value ? null : value };
 }
 
+/** KPI 조건을 켜고 끈다 */
+export function toggleFlag(f: Filters, flag: Flag): Filters {
+  return { ...f, [flag]: !f[flag] };
+}
+
+export function hasFlag(f: Filters): boolean {
+  return f.local || f.hoesik;
+}
+
 export function hasSelection(f: Filters): boolean {
-  return Boolean(f.cat || f.peak || f.cust);
+  return Boolean(f.cat || f.peak || f.cust || hasFlag(f));
 }
 
 /** 프랜차이즈 제외만 적용한 집합 */
@@ -96,9 +121,14 @@ function matches(s: Store, f: Filters, except?: FilterKey): boolean {
   return true;
 }
 
-/** 프랜차이즈 제외 + 차트 필터 교집합. except를 주면 그 차트의 필터만 뺀다. */
+/** 프랜차이즈 제외 + 차트 필터 교집합. except를 주면 그 차트의 필터만 뺀다. KPI 조건은 여기서 걸지 않는다(matchFlags). */
 export function applyFilters(stores: Store[], f: Filters, except?: FilterKey): Store[] {
   return baseStores(stores, f.fr).filter((s) => matches(s, f, except));
+}
+
+/** 켠 KPI 조건을 모두 충족하는 매장. 값이 true인 매장만 남긴다(false와 누락은 뺀다) */
+export function matchFlags(stores: Store[], f: Filters): Store[] {
+  return stores.filter((s) => FLAGS.every((k) => !f[k] || s[k] === true));
 }
 
 export type Ratio = { num: number; den: number };
@@ -127,7 +157,7 @@ export type Kpis = {
   count: number;
   local: Ratio;
   hoesik: Ratio;
-  /** customers[0] 기준. 유효 표본이 없으면 null */
+  /** 원본 rk01(customer1) 기준. rk01이 없는 매장은 미확인으로 빼고 rk02를 올리지 않는다. 유효 표본이 없으면 null */
   topCustomer: TopCustomer | null;
 };
 
@@ -135,7 +165,8 @@ export function computeKpis(stores: Store[]): Kpis {
   const counts = new Map<string, number>();
   let den = 0;
   for (const s of stores) {
-    const c = s.customers[0];
+    // 옛 기기 스냅샷에는 customer1이 없을 수 있다(undefined도 미확인).
+    const c = typeof s.customer1 === "string" && s.customer1 !== "" ? s.customer1 : null;
     if (!c) continue;
     den += 1;
     counts.set(c, (counts.get(c) ?? 0) + 1);
@@ -227,8 +258,10 @@ export type Analysis = {
   filters: Filters;
   /** 프랜차이즈 제외만 적용 */
   base: Store[];
-  /** 모든 필터 적용(KPI, 지도, 목록) */
+  /** 기준 집합: 프랜차이즈와 차트 필터 적용(KPI, 차트, 분석 매장 수). KPI 조건을 켜고 꺼도 바뀌지 않는다 */
   filtered: Store[];
+  /** 결과 집합: 기준 집합에 KPI 조건까지 적용(지도, 목록) */
+  matched: Store[];
   kpis: Kpis;
   /** 각 차트는 자기 필터를 뺀 나머지 필터로 계산한다 */
   peak: PeakGrid;
@@ -246,6 +279,7 @@ export function analyze(stores: Store[], filters: Filters): Analysis {
     filters: f,
     base,
     filtered,
+    matched: matchFlags(filtered, f),
     kpis: computeKpis(filtered),
     peak: computePeakGrid(applyFilters(stores, f, "peak"), base, f.peak),
     customers: computeCustomerBars(applyFilters(stores, f, "cust"), f.cust),

@@ -1,5 +1,5 @@
-/* 방문 기록과 다음 약속. 색과 서체는 계약 토큰만 쓴다.
-   파랑(--color-data)은 선택 상태와 내 기록 점에만, 오렌지(--color-cta)는 잇플 CTA에만 쓴다. */
+/* 방문 기록, 단계와 태그와 메모, 내 저장, 다음 약속. 색과 서체는 계약 토큰만 쓴다.
+   파랑(--color-data)은 선택 칩(모임 유형, 단계, 태그, 필터)과 다음 약속의 점에만, 오렌지(--color-cta)는 잇플 CTA에만 쓴다. */
 
 .num {
   font-variant-numeric: tabular-nums;
@@ -16,7 +16,6 @@
 .btn,
 .btnQuiet,
 .btnDanger,
-.save,
 .chip,
 .nameBtn,
 .cta {
@@ -30,8 +29,7 @@
   -webkit-tap-highlight-color: transparent;
 }
 
-.btn,
-.save {
+.btn {
   padding: 0 16px;
   border: 1px solid var(--color-ink-2);
   background: var(--color-panel);
@@ -53,12 +51,6 @@
   border: 1px solid var(--color-ink);
   background: var(--color-ink);
   color: var(--color-panel);
-}
-
-.save[aria-pressed="true"] {
-  border-color: var(--color-data);
-  color: var(--color-data);
-  font-weight: 600;
 }
 
 .chip {
@@ -94,23 +86,46 @@
   overflow-wrap: anywhere;
 }
 
-/* 잇플 CTA(MerLink에 className으로만 넘긴다. 핸들러 없음) */
+/* 잇플 CTA(MerLink에 className으로만 넘긴다. 핸들러 없음).
+   작은 글씨라 주황 채움 위 흰 글자는 대비가 모자란다. 홈 카드(feed.css .sc__cta)와 같은 모양:
+   흰 바탕에 진한 주황 글자와 주황 테두리, 입력칸 모서리, 누르면 진한 주황 채움 */
 .cta {
   display: inline-flex;
   align-items: center;
   padding: 0 16px;
-  border: 0;
-  background: var(--color-cta);
-  color: var(--color-cta-ink);
+  border: 1.5px solid var(--color-cta);
+  border-radius: var(--radius-input);
+  background: var(--color-panel);
+  color: var(--color-cta-text);
   font-weight: 700;
   text-decoration: none;
   white-space: nowrap;
+  transition: background-color var(--dur-micro) var(--ease-out), color var(--dur-micro) var(--ease-out);
+}
+
+.cta:active {
+  border-color: var(--color-cta-press);
+  background: var(--color-cta-press);
+  color: var(--color-cta-ink);
+}
+
+@media (hover: hover) {
+  .cta:hover {
+    border-color: var(--color-cta-press);
+    background: var(--color-cta-press);
+    color: var(--color-cta-ink);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cta {
+    transition: none;
+  }
 }
 
 .btn:focus-visible,
 .btnQuiet:focus-visible,
 .btnDanger:focus-visible,
-.save:focus-visible,
 .chip:focus-visible,
 .nameBtn:focus-visible,
 .cta:focus-visible,
@@ -121,7 +136,6 @@
 
 @media (hover: hover) {
   .btn:hover,
-  .save:hover,
   .chip:hover {
     border-color: var(--color-ink);
   }
@@ -135,6 +149,52 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
+}
+
+/* 북마크: 아이콘 하나, 44px. 저장되면 선택 색으로 채운다 */
+.bookmark {
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--color-ink-2);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: color var(--dur-micro) var(--ease-out), background-color var(--dur-micro) var(--ease-out);
+}
+
+.bookmark[aria-pressed="true"] {
+  color: var(--color-select);
+}
+
+.bookmark:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: -2px;
+}
+
+@media (hover: hover) {
+  .bookmark:hover {
+    background: var(--color-bg);
+    color: var(--color-ink);
+  }
+  .bookmark[aria-pressed="true"]:hover {
+    color: var(--color-select);
+  }
+}
+
+.bookmarkIcon {
+  display: block;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bookmark {
+    transition: none;
+  }
 }
 
 /* VisitControls */
@@ -234,28 +294,7 @@
   color: var(--color-ink);
 }
 
-/* StoreSignal: 목록 행 오른쪽 한 줄, 폭 제한 */
-.signal,
-.signalSlot {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  flex: none;
-  max-width: 8.5rem;
-  min-width: 0;
-  font-family: var(--font-body);
-  font-size: 0.75rem;
-  line-height: 1.3;
-  color: var(--color-ink-2);
-  white-space: nowrap;
-  overflow: hidden;
-}
-
-.signalText {
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
+/* 다음 약속에서 내가 남긴 방문 기록을 표시하는 점 */
 .dot {
   display: inline-block;
   flex: none;
@@ -265,36 +304,17 @@
   background: var(--color-data);
 }
 
-/* StoreSignalDetail */
-.detail {
-  display: grid;
-  gap: 12px;
-  font-family: var(--font-body);
-  color: var(--color-ink);
-}
-
-.detail section {
-  display: grid;
-  gap: 4px;
-}
-
-.detailTitle {
-  margin: 0;
-  font-size: 0.875rem;
-  font-weight: 700;
-}
-
 .detailLine {
   margin: 0;
   font-size: 0.875rem;
   line-height: 1.5;
 }
 
-.detailList {
-  margin: 0;
+/* 영수증 방문 요약의 방문 날짜(최근 순) */
+.visitList {
+  margin: 2px 0 0;
   padding: 0;
   list-style: none;
-  font-size: 0.875rem;
   line-height: 1.6;
   font-variant-numeric: tabular-nums;
 }
@@ -312,8 +332,7 @@
   color: var(--color-muted);
 }
 
-.plan,
-.records {
+.plan {
   display: grid;
   gap: 14px;
   padding: 16px;
@@ -469,7 +488,229 @@
   flex: none;
 }
 
-/* MyRecords */
+/* 내 저장: 탭, 패널, 항목 */
+.saves {
+  display: grid;
+  gap: 16px;
+  font-family: var(--font-body);
+  color: var(--color-ink);
+}
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--color-rule);
+}
+
+.tab {
+  flex: 1 1 0;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  background: none;
+  color: var(--color-ink-2);
+  font: 600 0.9375rem/1.2 var(--font-body);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: color var(--dur-micro) var(--ease-out), border-color var(--dur-micro) var(--ease-out);
+}
+
+.tab[aria-selected="true"] {
+  border-bottom-color: var(--color-select);
+  color: var(--color-ink);
+  font-weight: 700;
+}
+
+.tab:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: -2px;
+}
+
+@media (hover: hover) {
+  .tab:hover {
+    color: var(--color-ink);
+  }
+}
+
+.panel {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.itemRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.itemMain {
+  display: grid;
+  min-width: 0;
+}
+
+.itemRow .itemMeta {
+  font-variant-numeric: tabular-nums;
+}
+
+.item > .itemMeta {
+  margin: 0;
+}
+
+/* 다음 약속 묶음은 시트 안에서 테두리 없이 한 층으로 읽힌다 */
+.flat {
+  padding-top: 12px;
+  border-top: 1px solid var(--color-rule);
+}
+
+.flat > * {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.savesFoot {
+  display: grid;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-rule);
+}
+
+/* 리스트 공유 */
+.shareBar {
+  display: grid;
+  justify-items: start;
+  gap: 6px;
+}
+
+.share {
+  display: grid;
+  justify-self: stretch;
+  gap: 12px;
+  padding: 4px 0 16px;
+  border-bottom: 1px solid var(--color-rule);
+}
+
+.input {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--color-ink-2);
+  border-radius: var(--radius-input);
+  background: var(--color-panel);
+  color: var(--color-ink);
+  font: 400 1rem/1.2 var(--font-body);
+}
+
+.input:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 1px;
+}
+
+.pick {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.pickList {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pickItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 4px 0;
+  cursor: pointer;
+}
+
+.pickItem[data-disabled="true"] {
+  cursor: default;
+  color: var(--color-muted);
+}
+
+.check {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  accent-color: var(--color-select);
+}
+
+.check:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.pickText {
+  display: grid;
+  min-width: 0;
+}
+
+.btnPrimary {
+  min-height: 44px;
+  padding: 0 18px;
+  border: 1px solid var(--color-ink);
+  border-radius: var(--radius-pill);
+  background: var(--color-ink);
+  color: var(--color-panel);
+  font: 700 0.9375rem/1.2 var(--font-body);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.btnPrimary:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.btnPrimary:disabled,
+.btn:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.shareNote {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-ink-2);
+}
+
+.shareNote[data-ok="false"] {
+  color: var(--color-error);
+}
+
+/* 알림이 없을 때는 자리를 차지하지 않되, 읽기 도구가 바뀐 문구를 읽도록 접근성 트리에 남긴다 */
+.shareNote:empty {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tab {
+    transition: none;
+  }
+}
+
+/* 빈 상태, 기록 태그, 전체 삭제 확인 */
 .empty {
   margin: 0;
   font-size: 0.875rem;
@@ -508,4 +749,301 @@
   padding: 12px;
   border: 1px solid var(--color-ink-2);
   border-radius: var(--radius-panel);
+}
+
+/* 단계, 태그, 메모 편집(CrmEditor). 선택 칩은 방문 기록과 같은 .chip을 쓴다 */
+.crm,
+.crmStart {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  font-family: var(--font-body);
+  color: var(--color-ink);
+}
+
+.crmStart {
+  justify-items: start;
+  gap: 8px;
+}
+
+.inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.inline .input {
+  flex: 1 1 auto;
+}
+
+.inline .btn,
+.inline .btnQuiet {
+  flex: none;
+}
+
+.tagsOn {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tagOn {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding-left: 12px;
+  border: 1px solid var(--color-ink-2);
+  border-radius: var(--radius-pill);
+  background: var(--color-bg);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.tagText {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.tagRemove {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--color-ink-2);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.tagRemove svg {
+  display: block;
+}
+
+.tagRemove:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: -2px;
+}
+
+@media (hover: hover) {
+  .tagRemove:hover {
+    color: var(--color-ink);
+  }
+}
+
+.fieldNote {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-error);
+}
+
+.fieldNote:empty,
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.fieldHint {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--color-muted);
+}
+
+/* 내 저장: 단계와 태그 요약, 필터, 저장 해제한 곳 */
+.crmSummary {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.memoLine {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--color-ink-2);
+  overflow-wrap: anywhere;
+}
+
+.filters {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.filterRow {
+  display: grid;
+  grid-template-columns: 2.5rem minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+}
+
+.filterLabel {
+  margin: 0;
+  padding-top: 12px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-ink-2);
+}
+
+.chipSmall {
+  font-size: 0.875rem;
+}
+
+.emptyFilter {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+}
+
+.unsaved {
+  display: grid;
+  gap: 8px;
+  padding-top: 4px;
+  border-top: 1px solid var(--color-rule);
+}
+
+.unsavedToggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  color: var(--color-ink-2);
+  font: 600 0.9375rem/1.2 var(--font-body);
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.unsavedToggle:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: -2px;
+  border-radius: var(--radius-input);
+}
+
+.chev {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-right: 1.75px solid currentColor;
+  border-bottom: 1.75px solid currentColor;
+  transform: translateY(-2px) rotate(45deg);
+  transition: transform var(--dur-micro) var(--ease-out);
+}
+
+.chev[data-open="true"] {
+  transform: translateY(2px) rotate(-135deg);
+}
+
+.unsavedBody {
+  display: grid;
+  gap: 8px;
+}
+
+/* 저장 해제 알림: 화면 아래 한 줄. 닫히면 화면에서만 감추고 읽기 도구용 문구 자리는 남긴다 */
+.toast {
+  position: fixed;
+  z-index: var(--z-toast);
+  left: 50%;
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  width: min(32rem, calc(100vw - 32px));
+  padding: 8px 8px 8px 16px;
+  border-radius: var(--radius-panel);
+  background: var(--color-ink);
+  color: var(--color-panel);
+  font-family: var(--font-body);
+  box-shadow: 0 8px 24px -12px color-mix(in oklab, var(--color-ink) 60%, transparent);
+  transform: translateX(-50%);
+}
+
+.toast[data-open="false"] {
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  box-shadow: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .toast[data-open="true"] {
+    animation: toastIn var(--dur-short) var(--ease-out);
+  }
+}
+
+@keyframes toastIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%);
+  }
+}
+
+.toastText {
+  flex: 1 1 12rem;
+  min-width: 0;
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+.toastActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.toastBtn {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--radius-input);
+  background: transparent;
+  color: var(--color-panel);
+  font: 700 0.875rem/1.2 var(--font-body);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.toastBtn:focus-visible {
+  outline: 2px solid var(--color-panel);
+  outline-offset: -2px;
+}
+
+@media (hover: hover) {
+  .toastBtn:hover {
+    background: color-mix(in oklab, var(--color-panel) 14%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chev {
+    transition: none;
+  }
 }

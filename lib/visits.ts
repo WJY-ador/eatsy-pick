@@ -1,6 +1,7 @@
 // 내 방문 기록. 로그인 없이 이 기기의 localStorage에만 둔다.
 // 규칙: 저장은 방문이 아니다. 잇플 링크 클릭은 기록하지 않는다. "다녀왔어요"를 직접 눌러야 방문이다.
 // 반응(다시 갈래요, 다른 곳 볼래요)은 방문이 1회 이상일 때만 남길 수 있다.
+// 단계, 태그, 메모는 저장한 매장을 사용자가 분류하는 값이다. 기기 밖(서버, 공유 링크, 주소)으로 내보내지 않는다.
 // 저장소가 막힌 브라우저(사파리 비공개 모드 등)는 메모리에만 두고 persistent=false로 알린다.
 
 import { useSyncExternalStore } from "react";
@@ -9,20 +10,40 @@ import { type Occasion, isOccasion } from "./plan";
 
 export { OCCASIONS, type Occasion } from "./plan";
 
+// 키와 스키마 값을 바꾸지 않는다. parseVisits는 다른 스키마를 빈 상태로 읽어서, 값을 올리면 기존 저장이 전부 사라진다.
+// 단계, 태그, 메모는 같은 스키마 1 위에 더한 필드다. 없거나 깨졌으면 읽을 때 기본값으로 채운다.
 export const VISITS_KEY = "eatsy.visits.v1";
 export const VISITS_SCHEMA = 1;
 
 export type Reaction = "again" | "other";
+export type Stage = "want" | "planned" | "regular" | "hold";
+export const STAGES: { id: Stage; label: string }[] = [
+  { id: "want", label: "가고 싶은 곳" },
+  { id: "planned", label: "방문 예정" },
+  { id: "regular", label: "단골" },
+  { id: "hold", label: "보류" },
+];
+/** 빠른 태그. 화면에는 #을 붙인다. */
+export const QUICK_TAGS: string[] = ["회식", "데이트", "점심", "부모님"];
+export const TAG_LEN_MAX = 12;
+export const TAGS_MAX = 8;
+export const MEMO_MAX = 80;
+
 /** 다음에 API 없이 다시 그릴 수 있게 Store 전체를 받아 둔다(merUrl 원문 포함). */
 export type StoreSnapshot = Store;
 export type VisitEntry = { at: string; occasion?: Occasion };
 export type VisitRecord = {
   store: StoreSnapshot;
-  /** 저장한 시각. 저장하지 않았거나 저장을 풀면 null */
+  /** 저장한 시각. 저장하지 않았거나 저장을 풀면 null. 저장 여부는 isSaved로 본다 */
   savedAt: string | null;
   visits: VisitEntry[];
   reaction: Reaction | null;
   updatedAt: string;
+  /** 저장을 풀어도 남겨 두어, 다시 저장하면 되살린다 */
+  stage: Stage;
+  tags: string[];
+  /** 한 줄 메모. 없으면 빈 문자열 */
+  memo: string;
 };
 type Persisted = { schema: typeof VISITS_SCHEMA; records: Record<string, VisitRecord> };
 
@@ -59,6 +80,7 @@ const isStrOrNull = (v: unknown) => v === null || typeof v === "string";
 function validStore(v: unknown): v is StoreSnapshot {
   if (!v || typeof v !== "object") return false;
   const s = v as Record<string, unknown>;
+  // customer1은 보지 않는다. 옛 스냅샷에는 없을 수 있고, 읽을 때 미확인(null)으로 채운다.
   return (
     isStr(s.id) &&
     s.id.length > 0 &&
@@ -86,13 +108,59 @@ function validStore(v: unknown): v is StoreSnapshot {
   );
 }
 
-function validRecord(v: unknown): v is VisitRecord {
-  if (!v || typeof v !== "object") return false;
+export function isStage(v: unknown): v is Stage {
+  return STAGES.some((s) => s.id === v);
+}
+
+/** 태그 하나를 정리한다. 앞뒤 공백과 맨 앞 #을 떼고 안쪽 공백을 없앤다. 빈 값이나 TAG_LEN_MAX를 넘는 값은 null */
+export function normalizeTag(raw: string): string | null {
+  const t = raw.trim().replace(/^#+/, "").replace(/\s+/g, "");
+  if (!t || Array.from(t).length > TAG_LEN_MAX) return null;
+  return t;
+}
+
+/** 태그 목록을 정리한다(정리, 빈 값 제거, 중복 제거, 최대 TAGS_MAX개). 순서는 붙인 순서다. */
+export function cleanTags(list: readonly unknown[]): string[] {
+  const out: string[] = [];
+  for (const v of list) {
+    const t = typeof v === "string" ? normalizeTag(v) : null;
+    if (t && !out.includes(t)) out.push(t);
+    if (out.length === TAGS_MAX) break;
+  }
+  return out;
+}
+
+/** 메모를 한 줄로 정리한다. 줄바꿈과 연속 공백을 공백 하나로, 최대 MEMO_MAX자 */
+export function cleanMemo(raw: string): string {
+  return Array.from(raw.replace(/\s+/g, " ").trim()).slice(0, MEMO_MAX).join("").trim();
+}
+
+/** 저장된 기록인지. 저장을 풀었지만 방문, 태그, 메모 때문에 남은 기록은 false */
+export function isSaved(r: VisitRecord | undefined): boolean {
+  return !!r && r.savedAt !== null;
+}
+
+/** 태그나 메모가 있는지(저장 해제 뒤 되돌리기, 삭제 흐름이 필요한지) */
+export function hasNotes(r: VisitRecord | undefined): boolean {
+  return !!r && (r.tags.length > 0 || r.memo !== "");
+}
+
+/** 지킬 것이 없는 기록(저장도, 방문도, 태그와 메모도 없음)은 두지 않는다 */
+function keep(r: VisitRecord): VisitRecord | null {
+  return isSaved(r) || r.visits.length > 0 || hasNotes(r) ? r : null;
+}
+
+/**
+ * 기록 하나를 읽는다. 저장, 방문, 반응 필드가 깨졌으면 그 기록은 버린다.
+ * 단계, 태그, 메모는 깨져도 그 필드만 기본값이나 정리된 값으로 바꾸고 기록은 살린다.
+ */
+function readRecord(v: unknown): VisitRecord | null {
+  if (!v || typeof v !== "object") return null;
   const r = v as Record<string, unknown>;
-  if (!validStore(r.store)) return false;
-  if (!isStrOrNull(r.savedAt) || !isStr(r.updatedAt)) return false;
-  if (r.reaction !== null && r.reaction !== "again" && r.reaction !== "other") return false;
-  if (!Array.isArray(r.visits)) return false;
+  if (!validStore(r.store)) return null;
+  if (!isStrOrNull(r.savedAt) || !isStr(r.updatedAt)) return null;
+  if (r.reaction !== null && r.reaction !== "again" && r.reaction !== "other") return null;
+  if (!Array.isArray(r.visits)) return null;
   const visitsOk = r.visits.every(
     (e: unknown) =>
       !!e &&
@@ -100,11 +168,20 @@ function validRecord(v: unknown): v is VisitRecord {
       isStr((e as VisitEntry).at) &&
       ((e as VisitEntry).occasion === undefined || isOccasion((e as VisitEntry).occasion)),
   );
-  if (!visitsOk) return false;
-  // 방문 없는 반응, 저장도 방문도 없는 빈 기록은 규칙 위반이라 버린다.
-  if (r.visits.length === 0 && r.reaction !== null) return false;
-  if (r.visits.length === 0 && r.savedAt === null) return false;
-  return true;
+  if (!visitsOk) return null;
+  // 방문 없는 반응은 규칙 위반이라 버린다.
+  if (r.visits.length === 0 && r.reaction !== null) return null;
+  const store = r.store as StoreSnapshot & { customer1?: unknown };
+  return keep({
+    store: { ...store, customer1: isStr(store.customer1) && store.customer1 ? store.customer1 : null },
+    savedAt: r.savedAt as string | null,
+    visits: r.visits as VisitEntry[],
+    reaction: r.reaction as Reaction | null,
+    updatedAt: r.updatedAt,
+    stage: isStage(r.stage) ? r.stage : "want",
+    tags: Array.isArray(r.tags) ? cleanTags(r.tags) : [],
+    memo: isStr(r.memo) ? cleanMemo(r.memo) : "",
+  });
 }
 
 /** 저장소 원문을 읽는다. 깨진 값, 다른 스키마는 빈 상태로 본다. 기록 하나가 깨졌으면 그 기록만 버린다. */
@@ -120,8 +197,9 @@ export function parseVisits(raw: string | null): Record<string, VisitRecord> {
   const p = data as Partial<Persisted>;
   if (p.schema !== VISITS_SCHEMA || !p.records || typeof p.records !== "object") return {};
   const out: Record<string, VisitRecord> = {};
-  for (const [id, rec] of Object.entries(p.records)) {
-    if (validRecord(rec) && rec.store.id === id) out[id] = rec;
+  for (const [id, raw] of Object.entries(p.records)) {
+    const rec = readRecord(raw);
+    if (rec && rec.store.id === id) out[id] = rec;
   }
   return out;
 }
@@ -176,21 +254,51 @@ function update(id: string, fn: (r: VisitRecord | undefined) => VisitRecord | nu
   commit(records);
 }
 
-/** 저장. 방문으로 치지 않는다. */
-export function save(store: Store) {
+/**
+ * 저장. 방문으로 치지 않는다. 처음이면 가고 싶은 곳, 다시 저장하면 남아 있던 단계, 태그, 메모를 되살린다.
+ * savedAt을 주면 그 시각으로 저장한다(저장 해제를 되돌릴 때 원래 저장 시각과 순서를 지킨다).
+ */
+export function save(store: Store, savedAt?: string) {
   update(store.id, (r) => {
     const t = now();
-    if (r) return { ...r, store, savedAt: r.savedAt ?? t, updatedAt: t };
-    return { store, savedAt: t, visits: [], reaction: null, updatedAt: t };
+    if (r) return { ...r, store, savedAt: r.savedAt ?? savedAt ?? t, updatedAt: t };
+    return { store, savedAt: savedAt ?? t, visits: [], reaction: null, updatedAt: t, stage: "want", tags: [], memo: "" };
   });
 }
 
-/** 저장 해제. 방문 기록이 없으면 기록 자체를 지운다. */
+/** 저장 해제. 저장 시각만 지운다. 방문, 반응, 태그, 메모는 남기고, 남길 것이 없으면 기록 자체를 지운다. */
 export function unsave(id: string) {
+  update(id, (r) => (r ? keep({ ...r, savedAt: null, updatedAt: now() }) : null));
+}
+
+/** 저장된 기록에서 하나를 바꾼다. 저장되지 않았으면 무시한다. */
+function editSaved(id: string, fn: (r: VisitRecord) => VisitRecord) {
+  if (!isSaved(current().records[id])) return;
+  update(id, (r) => (r && isSaved(r) ? { ...fn(r), updatedAt: now() } : (r ?? null)));
+}
+
+/** 단계를 바꾼다. 저장된 기록에만. 저장(북마크)은 그대로다. */
+export function setStage(id: string, stage: Stage) {
+  if (!isStage(stage)) return;
+  editSaved(id, (r) => ({ ...r, stage }));
+}
+
+/** 태그를 바꾼다. 저장된 기록에만. 정리(공백, 중복, 빈 값, 상한)해서 둔다. */
+export function setTags(id: string, tags: string[]) {
+  editSaved(id, (r) => ({ ...r, tags: cleanTags(tags) }));
+}
+
+/** 메모를 바꾼다. 저장된 기록에만. 한 줄로 정리하고 빈 값이면 지운다. */
+export function setMemo(id: string, memo: string) {
+  editSaved(id, (r) => ({ ...r, memo: cleanMemo(memo) }));
+}
+
+/** 태그와 메모를 지운다(저장 해제 뒤 명시적 삭제). 저장되지 않은 기록은 단계도 처음으로 돌리고, 남길 것이 없으면 기록을 지운다. */
+export function deleteCrm(id: string) {
   update(id, (r) => {
     if (!r) return null;
-    if (r.visits.length === 0) return null;
-    return { ...r, savedAt: null, updatedAt: now() };
+    const next: VisitRecord = { ...r, tags: [], memo: "", updatedAt: now() };
+    return isSaved(next) ? next : keep({ ...next, stage: "want" });
   });
 }
 
@@ -200,7 +308,7 @@ export function markVisited(store: Store, occasion?: Occasion) {
     const t = now();
     const entry: VisitEntry = occasion ? { at: t, occasion } : { at: t };
     if (r) return { ...r, store, visits: [...r.visits, entry], updatedAt: t };
-    return { store, savedAt: null, visits: [entry], reaction: null, updatedAt: t };
+    return { store, savedAt: null, visits: [entry], reaction: null, updatedAt: t, stage: "want", tags: [], memo: "" };
   });
 }
 
@@ -227,17 +335,9 @@ export function setOccasion(id: string, occasion: Occasion | null) {
   });
 }
 
-/** 방문과 반응만 지운다. 저장은 남긴다. 저장도 안 했으면 기록 자체를 지운다. */
+/** 방문과 반응만 지운다. 저장, 태그, 메모는 남긴다. 남길 것이 없으면 기록 자체를 지운다. */
 export function clearVisits(id: string) {
-  update(id, (r) => {
-    if (!r || r.savedAt === null) return null;
-    return { ...r, visits: [], reaction: null, updatedAt: now() };
-  });
-}
-
-/** 매장 하나의 기록(저장, 방문, 반응)을 지운다. */
-export function remove(id: string) {
-  update(id, () => null);
+  update(id, (r) => (r ? keep({ ...r, visits: [], reaction: null, updatedAt: now() }) : null));
 }
 
 /** 전체 삭제 */
@@ -246,10 +346,6 @@ export function clearAll() {
 }
 
 /** 최근에 바뀐 순 */
-export function getAll(): VisitRecord[] {
-  return sortRecords(current().records);
-}
-
 export function sortRecords(records: Readonly<Record<string, VisitRecord>>): VisitRecord[] {
   return Object.values(records).sort((a, b) => (a.updatedAt === b.updatedAt ? 0 : a.updatedAt < b.updatedAt ? 1 : -1));
 }
