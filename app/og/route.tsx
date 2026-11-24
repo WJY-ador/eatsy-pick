@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { ImageResponse } from "next/og";
 import type { NextRequest } from "next/server";
+import { areaBySlug } from "@/lib/areas";
 import { OG_COLORS as C } from "@/lib/og-theme";
 import { ATTRIBUTION, SITE_NAME, SITE_TAGLINE } from "@/lib/site";
 import { type AreaDataset, cleanLoc, loadArea } from "@/lib/stores";
@@ -63,6 +64,17 @@ function GenericCard() {
   );
 }
 
+function AreaRankingCard({ name }: { name?: string }) {
+  const title = name ? `${name} 업종별 결제 랭킹` : "상권별 결제 랭킹";
+  const description = name ? `BC카드 결제 데이터로 보는 ${name} 근처 가게 순위` : "주요 상권의 업종별 BC카드 결제 순위";
+  return (
+    <Frame>
+      <div style={{ display: "flex", color: C.ink, fontSize: 60, fontWeight: 700 }}>{title}</div>
+      <div style={{ display: "flex", marginTop: 16, color: C.ink2, fontSize: 30 }}>{description}</div>
+    </Frame>
+  );
+}
+
 function AreaCard({ d }: { d: AreaDataset }) {
   const independent = d.stores.filter((s) => !s.franchise).length;
   const hoesik = d.stores.filter((s) => !s.franchise && s.hoesik === true).length;
@@ -95,7 +107,16 @@ async function render(node: React.ReactElement): Promise<Response> {
 
 export async function GET(request: NextRequest) {
   const sp = request.nextUrl.searchParams;
+  const type = sp.get("type");
   const area = sp.get("area") ?? undefined;
+  if (type === "area-index" || type === "area-ranking") {
+    const name = type === "area-ranking" ? areaBySlug(area)?.name : undefined;
+    try {
+      return await render(<AreaRankingCard name={name} />);
+    } catch {
+      return new Response(null, { status: 204, headers: { "cache-control": "no-store" } });
+    }
+  }
   const loc = cleanLoc(sp.get("loc")) ?? undefined;
   try {
     const d = await loadArea({ area, loc });

@@ -12,6 +12,7 @@ import type { Store } from "@/lib/stores";
 
 /** 대표 숫자 아래 기준 문구(ccgSaleRnk 정의) */
 const RANK_SCOPE = "같은 시군구, 같은 업종 내 BC카드 결제 매출 기준";
+const RECEIPT_MER_LINK_TEXT = "실시간 영업, 웨이팅, 메뉴 가격 보기";
 
 type BadgeFlag = "local" | "hoesik";
 
@@ -252,7 +253,7 @@ export function Receipt({
           </section>
         </div>
         <div className="rc__foot">
-          <MerLink merUrl={store.merUrl} className="cta rc__cta" />
+          <MerLink merUrl={store.merUrl} label={RECEIPT_MER_LINK_TEXT} className="cta cta--ink rc__cta" />
           <p className="rc__attr">{ATTRIBUTION}</p>
           <p className="rc__disc">{DISCLAIMER}</p>
         </div>

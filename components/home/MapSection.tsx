@@ -49,10 +49,11 @@ function byRank(a: Row, b: Row): number {
 function stickyBottom(): number {
   let bottom = 0;
   for (const el of document.querySelectorAll("header, .inapp")) {
-    const pos = getComputedStyle(el).position;
-    if (pos !== "sticky" && pos !== "fixed") continue;
+    const style = getComputedStyle(el);
+    if (style.position !== "sticky" && style.position !== "fixed") continue;
     const r = el.getBoundingClientRect();
-    if (r.top <= 1) bottom = Math.max(bottom, r.bottom);
+    const top = Number.parseFloat(style.top) || 0;
+    if (r.top <= top + 1) bottom = Math.max(bottom, r.bottom);
   }
   return Math.round(bottom);
 }

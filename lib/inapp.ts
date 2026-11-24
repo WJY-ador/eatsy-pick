@@ -16,11 +16,11 @@ export function detectInapp(ua: string | null | undefined): InappInfo {
   let kind: InappKind | null = null;
   if (/KAKAOTALK/i.test(ua)) kind = "kakaotalk";
   // Threads는 Barcelona 토큰으로 알려져 있다. 확신이 없어 Threads 문자열도 본다.
-  else if (/Barcelona|Threads/.test(ua)) kind = "threads";
-  else if (/Instagram/.test(ua)) kind = "instagram";
-  else if (/FBAN|FBAV|FB_IAB/.test(ua)) kind = "facebook";
-  else if (/NAVER\(inapp/.test(ua)) kind = "naver";
-  else if (/\bLine\//.test(ua)) kind = "line";
+  else if (/Barcelona|Threads/i.test(ua)) kind = "threads";
+  else if (/Instagram/i.test(ua)) kind = "instagram";
+  else if (/FBAN|FBAV|FB_IAB/i.test(ua)) kind = "facebook";
+  else if (/\bNAVER\b/i.test(ua)) kind = "naver";
+  else if (/\bLine\b/i.test(ua)) kind = "line";
   return kind ? { kind, os: osOf(ua) } : null;
 }
 

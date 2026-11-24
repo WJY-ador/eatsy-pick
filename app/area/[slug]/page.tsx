@@ -22,11 +22,14 @@ export async function generateMetadata({ params }: PageProps<"/area/[slug]">): P
   if (!area) notFound();
   const title = `${area.name} 업종별 결제 랭킹 | ${SITE_NAME}`;
   const description = `${area.name} 근처 고기구이, 한식, 일식, 호프, 국수, 카페의 시군구 매출 상위 가게를 BC카드 결제 데이터로 봅니다.`;
+  const url = `/area/${area.slug}`;
+  const image = `/og?type=area-ranking&area=${area.slug}`;
   return {
     title: { absolute: title },
     description,
-    alternates: { canonical: `/area/${area.slug}` },
-    openGraph: { title, description, url: `/area/${area.slug}` },
+    alternates: { canonical: url },
+    openGraph: { type: "website", locale: "ko_KR", siteName: SITE_NAME, title, description, url, images: [{ url: image, width: 1200, height: 630, alt: title }] },
+    twitter: { card: "summary_large_image", title, description, images: [image] },
   };
 }
 

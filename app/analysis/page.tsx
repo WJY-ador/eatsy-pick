@@ -26,8 +26,8 @@ export async function generateMetadata({ searchParams }: PageProps<"/analysis">)
   if (f.cust) parts.push(f.cust);
   if (f.local) parts.push("동네맛집");
   if (f.hoesik) parts.push("회식 적합");
-  const description = `${scopeName(scope)}${scope.food ? `에서 ${scope.food} 업종으로 조회한` : "의"} BC카드 결제 데이터로 업종, 대표 피크 요일과 시간대, 주 고객층을 나눠 봅니다.${
-    parts.length > 0 ? ` 적용 필터: ${parts.join(", ")}.` : ""
+  const description = `${scopeName(scope)}${scope.food ? ` ${scope.food}` : ""} 상권을 BC카드 결제 데이터로 살펴보세요. 업종별 매장 분포, 대표 피크 요일과 시간대, 주 고객층을 비교합니다.${
+    parts.length > 0 ? ` ${parts.join(", ")} 조건을 적용했습니다.` : ""
   }`;
   const og = new URL(ogPath(scope, f), siteUrl()).href;
   return {
