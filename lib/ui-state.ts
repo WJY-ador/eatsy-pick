@@ -5,12 +5,20 @@
 
 import { useSyncExternalStore } from "react";
 import type { Store } from "./stores";
-import type { Stage } from "./visits";
+import type { Stage, VisitRecord } from "./visits";
 
 export type HomeContext = { stores: Store[]; title: string; open: (store: Store) => void };
 export type SavesFilter = Stage | "all";
-/** 태그나 메모가 있는 매장의 저장을 풀었을 때. savedAt은 되돌릴 때 쓸 원래 저장 시각 */
-export type UnsaveNotice = { store: Store; savedAt: string; seq: number };
+/**
+ * 태그나 메모가 있는 매장의 저장을 풀었을 때. savedAt은 되돌릴 때 쓸 원래 저장 시각.
+ * restore는 그 사이 기록이 지워졌을 때 되돌리기로 함께 되살릴 저장 때 순위와 단골 제안 닫음이다.
+ */
+export type UnsaveNotice = {
+  store: Store;
+  savedAt: string;
+  restore: Pick<VisitRecord, "savedRank" | "regularAskClosed">;
+  seq: number;
+};
 type UiState = {
   recordsOpen: boolean;
   savesStage: SavesFilter;
@@ -34,8 +42,8 @@ export const openSaves = (stage: SavesFilter = "all") =>
   set({ recordsOpen: true, savesStage: stage, savesSeq: state.savesSeq + 1 });
 export const closeRecords = () => set({ recordsOpen: false });
 export const setHomeContext = (home: HomeContext | null) => set({ home });
-export const showUnsaveNotice = (store: Store, savedAt: string) =>
-  set({ unsaveNotice: { store, savedAt, seq: (state.unsaveNotice?.seq ?? 0) + 1 } });
+export const showUnsaveNotice = (store: Store, savedAt: string, restore: UnsaveNotice["restore"]) =>
+  set({ unsaveNotice: { store, savedAt, restore, seq: (state.unsaveNotice?.seq ?? 0) + 1 } });
 export const closeUnsaveNotice = () => set({ unsaveNotice: null });
 
 export function useUi(): UiState {

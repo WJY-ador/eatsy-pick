@@ -29,8 +29,9 @@ const TAG_DUP = "이미 붙은 태그입니다.";
  * 저장한 매장의 단계, 태그, 한 줄 메모 편집. 영수증과 내 저장이 같이 쓴다(값은 lib/visits 하나에서 읽어 바로 같아진다).
  * 저장하지 않은 매장이면 저장하고 관리하기 버튼 하나만 둔다. 매장이 바뀌면 key로 새로 그린다(쓰던 메모는 그때 저장).
  * 단계를 바꿔도 저장은 그대로다. 단골은 분류일 뿐 방문 기록을 남기지 않는다.
+ * live: store가 지금 조회한 값인지(기본 true). false면 저장하고 관리하기로 저장해도 저장 때 순위를 찍지 않는다.
  */
-export function CrmEditor({ store }: { store: Store }) {
+export function CrmEditor({ store, live = true }: { store: Store; live?: boolean }) {
   const rec = useVisitRecord(store.id);
   const saved = isSaved(rec);
   const stageId = useId();
@@ -71,7 +72,7 @@ export function CrmEditor({ store }: { store: Store }) {
           data-testid="crm-start"
           onClick={() => {
             focusStage.current = true;
-            save(store);
+            save(store, { live });
           }}
         >
           저장하고 관리하기

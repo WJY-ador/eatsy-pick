@@ -3,7 +3,9 @@
 import "@/app/mapsection.css";
 import { type Ref, useCallback, useEffect, useId, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { StoreMap } from "@/components/StoreMap";
+import { AREA_SEARCH_MAX_KM, type MapView } from "@/lib/area-search";
 import { distanceM } from "@/lib/store-view";
+import { holdTop, topStuck } from "@/lib/top-fold";
 import type { Store } from "@/lib/stores";
 import { StoreCard } from "./StoreCard";
 
@@ -34,6 +36,11 @@ export type MapSectionProps = {
   onOpen: (store: Store, trigger: HTMLElement | null) => void;
   sort: "near" | "rank";
   onSort: (s: "near" | "rank") => void;
+  /**
+   * 있으면 지도에 현 지도에서 검색 버튼을 띄운다(사용자가 지도를 움직인 뒤, 보이는 가로 폭이 AREA_SEARCH_MAX_KM 이하일 때만).
+   * 누르면 그때의 지도 범위를 넘긴다. 이동했으면 null, 못 갔으면 지도 위에 띄울 짧은 안내를 돌려준다
+   */
+  onAreaSearch?: (v: MapView) => Promise<string | null>;
   ref?: Ref<MapSectionHandle>;
 };
 
@@ -85,7 +92,7 @@ function stuckHeight(): number {
  * 지도 인스턴스는 하나다. 지도 크게 보기는 data-expanded와 CSS만 바꾸므로 조건, 선택, 지도 위치가 그대로 남는다.
  * 지도 이동, 확대, 묶음 풀기, 정렬은 서버를 부르지 않는다(정렬 주소 반영은 onSort를 받은 쪽이 history로 한다).
  */
-export function MapSection({ stores, origin, originLabel, focus, me, near, locateState, onLocate, selectedId, onOpen, sort, onSort, ref }: MapSectionProps) {
+export function MapSection({ stores, origin, originLabel, focus, me, near, locateState, onLocate, selectedId, onOpen, sort, onSort, onAreaSearch, ref }: MapSectionProps) {
   const headId = useId();
   const listId = useId();
   const sectionRef = useRef<HTMLElement>(null);
@@ -97,6 +104,56 @@ export function MapSection({ stores, origin, originLabel, focus, me, near, locat
   // 영수증을 닫아도 마지막으로 연 매장을 지도와 목록에서 계속 표시한다(지도 크게 보기와 피드를 오가도 유지).
   const [picked, setPicked] = useState<string | null>(selectedId);
   if (selectedId !== null && selectedId !== picked) setPicked(selectedId);
+
+  // 현 지도에서 검색: 사용자가 움직인 지도 범위(자동 맞춤이면 null), 조회 중 여부, 지도 위 안내 한 줄.
+  // 매장 집합이나 기준점이 바뀌면(지역 이동) 지도가 첫 화면 규칙으로 돌아가므로 버튼과 안내를 지운다.
+  const [view, setView] = useState<MapView | null>(null);
+  const [searching, setSearching] = useState(false);
+  const [areaNote, setAreaNote] = useState<string | null>(null);
+  const viewKey = `${stores.map((st) => st.id).join(",")}|${focus ? `${focus.lat},${focus.lng}` : ""}`;
+  const [seenViewKey, setSeenViewKey] = useState(viewKey);
+  if (seenViewKey !== viewKey) {
+    setSeenViewKey(viewKey);
+    setView(null);
+    setAreaNote(null);
+  }
+  // 제스처로 시작된 이동만 버튼을 새로 띄운다. 제스처가 아닌 이동(목록 선택의 panTo)은 이미 떠 있는 버튼의 범위만 고친다.
+  const onUserView = useCallback((v: MapView | null, byGesture: boolean) => {
+    if (v === null || byGesture) {
+      setView(v);
+      setAreaNote(null);
+      return;
+    }
+    setView((prev) => (prev ? v : prev));
+  }, []);
+  const searchHere = async () => {
+    if (!onAreaSearch || !view || searching) return;
+    setSearching(true);
+    try {
+      // 이동했거나 안내를 띄우면 버튼을 내린다. 다시 움직이면 다시 뜬다.
+      const note = await onAreaSearch(view);
+      setView(null);
+      setAreaNote(note);
+    } finally {
+      setSearching(false);
+    }
+  };
+  const hereShown = !!onAreaSearch && view !== null && view.widthKm <= AREA_SEARCH_MAX_KM;
+  const hereOverlay =
+    onAreaSearch && (hereShown || areaNote) ? (
+      <div className="mapsec__here" data-testid="map-search-here">
+        {hereShown ? (
+          <button type="button" className="mapsec__here-btn" data-map-ctl="" disabled={searching} aria-busy={searching} onClick={() => void searchHere()}>
+            {searching ? "지역 찾는 중" : "현 지도에서 검색"}
+          </button>
+        ) : null}
+        {areaNote ? (
+          <p className="mapsec__here-note" role="status">
+            {areaNote}
+          </p>
+        ) : null}
+      </div>
+    ) : null;
 
   const rows = useMemo(() => {
     const all: Row[] = stores.map((s, i) => ({ s, i, d: origin ? distanceM(origin, s) : null }));
@@ -133,14 +190,19 @@ export function MapSection({ stores, origin, originLabel, focus, me, near, locat
     const next = !expanded;
     const sec = sectionRef.current;
     if (sec) {
-      const top = stickyBottom();
+      // 768px 미만: 넓히면 아래로 옮기므로 상단 바를 접어 묶고 접힌 높이를 쓴다. 접을 때는 상단 바의 지금 상태 높이를 쓴다.
+      const top = next ? (holdTop(true) ?? stickyBottom()) : (topStuck() ?? stickyBottom());
       sec.style.setProperty("--mapsec-top", `${top}px`);
       setExpanded(next);
       // 넓히면 섹션 머리를 고정 머리말 바로 아래로 올린다. 접으면 섹션 머리가 보이는 자리에 둔다.
       window.requestAnimationFrame(() => {
         const r = sec.getBoundingClientRect();
         const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-        if (next || r.top < top) window.scrollTo({ top: window.scrollY + r.top - top, behavior: still ? "auto" : "smooth" });
+        if (next || r.top < top) {
+          // 접으면서 위로 굴릴 때는 상단 바를 지금 상태로 묶는다(위로 가는 스크롤이 펼쳐 섹션 머리를 가리지 않게).
+          if (!next) holdTop();
+          window.scrollTo({ top: window.scrollY + r.top - top, behavior: still ? "auto" : "smooth" });
+        }
       });
       return;
     }
@@ -150,7 +212,8 @@ export function MapSection({ stores, origin, originLabel, focus, me, near, locat
   const count = rows.length;
 
   // 지도 보기(홈 지역 줄): 지도 인스턴스, 조건, 선택, 정렬은 그대로 두고 자리만 옮긴다. 주소 기록을 남기지 않으려고 해시 대신 스크롤한다.
-  // html의 scroll-padding-top(96px)이 scrollIntoView에 더해지므로, 지도 크게 보기와 같이 고정 머리말 높이로 직접 계산한다.
+  // html의 scroll-padding-top(768px 이상 96px, 미만은 펼친 상단 바와 인앱 안내 높이의 합)이 scrollIntoView에 더해지므로, 지도 크게 보기와 같이 고정 머리말 높이로 직접 계산한다.
+  // 768px 미만은 아래로 옮기므로 상단 바를 먼저 접어 묶고(바로잡기 스크롤까지 다시 펼치지 않게) 접힌 높이를 쓴다.
   // 부드러운 스크롤 중에 위쪽 높이가 바뀌면(추천 섹션이 늦게 끼어드는 경우 등) 멈춘 뒤 한 번 바로잡는다. 그 사이 사용자가 스크롤하면 바로잡지 않는다.
   useImperativeHandle(
     ref,
@@ -158,7 +221,7 @@ export function MapSection({ stores, origin, originLabel, focus, me, near, locat
       reveal: () => {
         const sec = sectionRef.current;
         if (!sec) return;
-        const top = stuckHeight();
+        const top = holdTop(true) ?? stuckHeight();
         sec.style.setProperty("--mapsec-top", `${top}px`);
         if (count > 0 && window.matchMedia("(max-width: 767.98px)").matches) setExpanded(true);
         window.requestAnimationFrame(() => {
@@ -244,6 +307,9 @@ export function MapSection({ stores, origin, originLabel, focus, me, near, locat
               focus={focus}
               hoverId={hoverId}
               labelTop={LABEL_TOP}
+              onUserView={onAreaSearch ? onUserView : undefined}
+              overlay={hereOverlay}
+              touchLock={!expanded}
             />
           </div>
           <div className="mapsec__side">

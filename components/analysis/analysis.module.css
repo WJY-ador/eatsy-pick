@@ -1086,15 +1086,16 @@
   justify-items: end;
 }
 
+/* 가게 이름은 터치 대상이라 1024px 아래는 44px 높이. 글자는 줄 높이로 세로 가운데에 둔다(block이라 말줄임이 유지된다) */
 .pyrStore {
   display: block;
   max-width: 100%;
-  min-height: 28px;
+  min-height: 44px;
   padding: 2px 4px;
   border: 0;
   background: none;
   color: var(--color-ink-2);
-  font: 500 0.75rem/1.4 var(--font-body);
+  font: 500 0.75rem/40px var(--font-body);
   text-decoration: underline;
   text-underline-offset: 3px;
   text-decoration-color: var(--color-rule);
@@ -1251,6 +1252,14 @@
   .pyrHead,
   .pyrRow {
     grid-template-columns: minmax(0, 1fr) 4.5rem minmax(0, 1fr);
+  }
+}
+
+/* 1024px 이상은 마우스 화면이라 이름 칸을 낮게 둔다(PC 피라미드 높이 유지) */
+@media (min-width: 64rem) {
+  .pyrStore {
+    min-height: 28px;
+    line-height: 1.4;
   }
 }
 

@@ -90,6 +90,8 @@
 .rc__copied[data-ok="false"] { color: var(--color-error); }
 /* 알림이 없을 때는 자리를 차지하지 않되, 읽기 도구가 바뀐 문구를 읽도록 접근성 트리에 남긴다 */
 .rc__copied:empty { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+/* 이 동네 상권 분석: 잇플 CTA보다 낮은 보조 텍스트 링크. 주소 바로 아래, 왼쪽 정렬 */
+.rc__area { justify-self: start; font-size: var(--text-sm); }
 .rc__dash { width: 100%; margin: var(--space-2xs) 0; border: 0; border-top: 2px dashed var(--color-rule); }
 .rc__list { display: grid; margin: 0; }
 .rc__row { display: grid; grid-template-columns: 8.5rem minmax(0, 1fr); gap: var(--space-sm); padding-block: var(--space-xs); }

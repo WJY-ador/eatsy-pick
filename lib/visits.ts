@@ -11,7 +11,7 @@ import { type Occasion, isOccasion } from "./plan";
 export { OCCASIONS, type Occasion } from "./plan";
 
 // 키와 스키마 값을 바꾸지 않는다. parseVisits는 다른 스키마를 빈 상태로 읽어서, 값을 올리면 기존 저장이 전부 사라진다.
-// 단계, 태그, 메모는 같은 스키마 1 위에 더한 필드다. 없거나 깨졌으면 읽을 때 기본값으로 채운다.
+// 단계, 태그, 메모, 저장 때 순위, 단골 제안 닫음은 같은 스키마 1 위에 더한 필드다. 없거나 깨졌으면 읽을 때 기본값으로 채운다.
 export const VISITS_KEY = "eatsy.visits.v1";
 export const VISITS_SCHEMA = 1;
 
@@ -28,6 +28,10 @@ export const QUICK_TAGS: string[] = ["회식", "데이트", "점심", "부모님
 export const TAG_LEN_MAX = 12;
 export const TAGS_MAX = 8;
 export const MEMO_MAX = 80;
+/** 다녀왔어요를 이만큼 눌렀고 단골도 보류도 아니면 단골로 옮길지 한 번 묻는다 */
+export const REGULAR_ASK_VISITS = 3;
+/** 단골인데 마지막 다녀왔어요 뒤 이 날수(KST 날짜) 이상 지나면 내 저장의 오래 안 간 단골에 묶는다 */
+export const REGULAR_DORMANT_DAYS = 60;
 
 /** 다음에 API 없이 다시 그릴 수 있게 Store 전체를 받아 둔다(merUrl 원문 포함). */
 export type StoreSnapshot = Store;
@@ -44,6 +48,13 @@ export type VisitRecord = {
   tags: string[];
   /** 한 줄 메모. 없으면 빈 문자열 */
   memo: string;
+  /**
+   * 처음 저장할 때의 지역 매출 순위(store.ccgRank). 다시 저장해도 바꾸지 않는다.
+   * 이 칸이 생기기 전 기록, 그때 순위가 없던 매장, 지금 조회값이 아닌 사본으로 저장한 경우는 null이다(지어내지 않는다).
+   */
+  savedRank: number | null;
+  /** 단골 제안을 닫았으면 true. 그 매장에는 다시 묻지 않는다 */
+  regularAskClosed: boolean;
 };
 type Persisted = { schema: typeof VISITS_SCHEMA; records: Record<string, VisitRecord> };
 
@@ -76,6 +87,7 @@ const isStr = (v: unknown): v is string => typeof v === "string";
 const isNumOrNull = (v: unknown) => v === null || (typeof v === "number" && Number.isFinite(v));
 const isBoolOrNull = (v: unknown) => v === null || typeof v === "boolean";
 const isStrOrNull = (v: unknown) => v === null || typeof v === "string";
+const finiteOrNull = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
 
 function validStore(v: unknown): v is StoreSnapshot {
   if (!v || typeof v !== "object") return false;
@@ -152,7 +164,7 @@ function keep(r: VisitRecord): VisitRecord | null {
 
 /**
  * 기록 하나를 읽는다. 저장, 방문, 반응 필드가 깨졌으면 그 기록은 버린다.
- * 단계, 태그, 메모는 깨져도 그 필드만 기본값이나 정리된 값으로 바꾸고 기록은 살린다.
+ * 단계, 태그, 메모, 저장 때 순위, 단골 제안 닫음은 깨져도 그 필드만 기본값이나 정리된 값으로 바꾸고 기록은 살린다.
  */
 function readRecord(v: unknown): VisitRecord | null {
   if (!v || typeof v !== "object") return null;
@@ -181,6 +193,8 @@ function readRecord(v: unknown): VisitRecord | null {
     stage: isStage(r.stage) ? r.stage : "want",
     tags: Array.isArray(r.tags) ? cleanTags(r.tags) : [],
     memo: isStr(r.memo) ? cleanMemo(r.memo) : "",
+    savedRank: finiteOrNull(r.savedRank),
+    regularAskClosed: r.regularAskClosed === true,
   });
 }
 
@@ -254,15 +268,36 @@ function update(id: string, fn: (r: VisitRecord | undefined) => VisitRecord | nu
   commit(records);
 }
 
+export type SaveOptions = {
+  /** 이 시각으로 저장한다(저장 해제를 되돌릴 때 원래 저장 시각과 순서를 지킨다). 주면 저장 때 순위를 새로 찍지 않는다 */
+  savedAt?: string;
+  /** store가 지금 조회한 값인지. false(내 저장에 남은 사본 등)면 저장 때 순위를 찍지 않는다. 기본 true */
+  live?: boolean;
+  /** 기록이 지워진 뒤 되돌릴 때 함께 되살릴 값(남아 있는 기록이면 쓰지 않는다) */
+  restore?: Pick<VisitRecord, "savedRank" | "regularAskClosed">;
+};
+
 /**
- * 저장. 방문으로 치지 않는다. 처음이면 가고 싶은 곳, 다시 저장하면 남아 있던 단계, 태그, 메모를 되살린다.
- * savedAt을 주면 그 시각으로 저장한다(저장 해제를 되돌릴 때 원래 저장 시각과 순서를 지킨다).
+ * 저장. 방문으로 치지 않는다. 처음이면 가고 싶은 곳, 다시 저장하면 남아 있던 단계, 태그, 메모, 저장 때 순위를 되살린다.
+ * 저장 때 순위는 저장되지 않은 상태에서 지금 조회값으로 저장할 때, 이미 찍힌 값이 없을 때만 찍는다.
  */
-export function save(store: Store, savedAt?: string) {
+export function save(store: Store, { savedAt, live = true, restore }: SaveOptions = {}) {
   update(store.id, (r) => {
     const t = now();
-    if (r) return { ...r, store, savedAt: r.savedAt ?? savedAt ?? t, updatedAt: t };
-    return { store, savedAt: savedAt ?? t, visits: [], reaction: null, updatedAt: t, stage: "want", tags: [], memo: "" };
+    const stamp = savedAt === undefined && live && !isSaved(r) ? finiteOrNull(store.ccgRank) : null;
+    if (r) return { ...r, store, savedAt: r.savedAt ?? savedAt ?? t, savedRank: r.savedRank ?? stamp, updatedAt: t };
+    return {
+      store,
+      savedAt: savedAt ?? t,
+      visits: [],
+      reaction: null,
+      updatedAt: t,
+      stage: "want",
+      tags: [],
+      memo: "",
+      savedRank: restore?.savedRank ?? stamp,
+      regularAskClosed: restore?.regularAskClosed ?? false,
+    };
   });
 }
 
@@ -288,6 +323,23 @@ export function setTags(id: string, tags: string[]) {
   editSaved(id, (r) => ({ ...r, tags: cleanTags(tags) }));
 }
 
+/** 단골 제안을 닫는다. 저장된 기록에만. 그 매장에는 다시 묻지 않는다. */
+export function closeRegularAsk(id: string) {
+  editSaved(id, (r) => ({ ...r, regularAskClosed: true }));
+}
+
+/** 단골로 옮길지 물을지. 저장했고, 다녀왔어요가 REGULAR_ASK_VISITS번 이상이고, 단골도 보류도 아니고, 닫지 않았을 때 */
+export function shouldAskRegular(r: VisitRecord | undefined): boolean {
+  return (
+    !!r &&
+    isSaved(r) &&
+    r.visits.length >= REGULAR_ASK_VISITS &&
+    r.stage !== "regular" &&
+    r.stage !== "hold" &&
+    !r.regularAskClosed
+  );
+}
+
 /** 메모를 바꾼다. 저장된 기록에만. 한 줄로 정리하고 빈 값이면 지운다. */
 export function setMemo(id: string, memo: string) {
   editSaved(id, (r) => ({ ...r, memo: cleanMemo(memo) }));
@@ -308,7 +360,18 @@ export function markVisited(store: Store, occasion?: Occasion) {
     const t = now();
     const entry: VisitEntry = occasion ? { at: t, occasion } : { at: t };
     if (r) return { ...r, store, visits: [...r.visits, entry], updatedAt: t };
-    return { store, savedAt: null, visits: [entry], reaction: null, updatedAt: t, stage: "want", tags: [], memo: "" };
+    return {
+      store,
+      savedAt: null,
+      visits: [entry],
+      reaction: null,
+      updatedAt: t,
+      stage: "want",
+      tags: [],
+      memo: "",
+      savedRank: null,
+      regularAskClosed: false,
+    };
   });
 }
 

@@ -83,7 +83,7 @@ export function UnsaveNotice() {
             className={s.toastBtn}
             data-testid="unsave-undo"
             onClick={() => {
-              save(n.store, n.savedAt);
+              save(n.store, { savedAt: n.savedAt, restore: n.restore });
               finish(null);
             }}
           >

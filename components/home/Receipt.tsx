@@ -1,18 +1,21 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useId, useRef, useState } from "react";
 import "@/app/receipt.css";
 import { MerLink } from "@/components/MerLink";
 import { useEscapeLayer } from "@/components/Sheet";
-import { BookmarkButton, CrmEditor, VisitControls } from "@/components/visits";
+import { BookmarkButton, CrmEditor, CrmFacts, VisitControls } from "@/components/visits";
 import { copyText } from "@/components/visits/clipboard";
+import { analysisHref } from "@/lib/home-params";
 import { ATTRIBUTION, DISCLAIMER } from "@/lib/site";
-import { customersOf, displayName, hoursOf, peakOf, percentLabel } from "@/lib/store-view";
+import { customersOf, displayName, dongLocOf, hoursOf, peakOf, percentLabel } from "@/lib/store-view";
 import type { Store } from "@/lib/stores";
 
 /** 대표 숫자 아래 기준 문구(ccgSaleRnk 정의) */
 const RANK_SCOPE = "같은 시군구, 같은 업종 내 BC카드 결제 매출 기준";
 const RECEIPT_MER_LINK_TEXT = "실시간 영업, 웨이팅, 메뉴 가격 보기";
+const AREA_LINK_TEXT = "이 동네 상권 분석 보기";
 
 type BadgeFlag = "local" | "hoesik";
 
@@ -45,6 +48,10 @@ const COPY_NOTE_MS = 4000;
  * 닫으면 연 요소로 포커스를 돌려준다(여는 쪽이 먼저 돌려주면 그대로 둔다).
  * 저장 표시와 내 기록(단계, 태그, 메모, 방문)은 북마크와 같은 기기 기록에서 읽어 카드, 목록, 내 저장과 바로 같아진다.
  * 잇플 CTA와 의무 표기는 패널 아래 고정 줄에 둔다. 내 기록이 길어져도 스크롤 없이 보인다.
+ * 주소에서 법정동을 뽑으면 주소 아래에 그 동의 상권 분석 링크(보조 링크)를 둔다. 동을 못 뽑으면(읍, 면 주소 등) 두지 않는다.
+ * 지금 그 동의 상권 분석을 보고 있으면(analysisLoc) 같은 화면이라 두지 않는다.
+ * live: store가 지금 조회한 매장 데이터인지. 내 저장에 남은 사본으로 열었으면 false로, 저장할 때와 지금 순위 비교를 띄우지 않고
+ * 여기서 저장해도 저장 때 순위를 찍지 않는다. 모르면 false(기본).
  */
 export function Receipt({
   store,
@@ -52,6 +59,8 @@ export function Receipt({
   distanceBasis,
   onClose,
   onPeak,
+  analysisLoc = null,
+  live = false,
 }: {
   store: Store;
   distance: string | null;
@@ -59,6 +68,10 @@ export function Receipt({
   onClose: () => void;
   /** 대표 피크 차트를 연다(없으면 글자로만) */
   onPeak?: () => void;
+  /** 이 영수증을 연 상권 분석 화면의 loc(상권 분석 밖이나 area 범위면 null) */
+  analysisLoc?: string | null;
+  /** store가 지금 조회한 값인지(기본 false) */
+  live?: boolean;
 }) {
   const titleId = useId();
   const mineId = useId();
@@ -74,6 +87,11 @@ export function Receipt({
   // 옛 기기 스냅샷은 값이 비었거나 다른 꼴일 수 있어 수와 true만 인정한다
   const rank = typeof store.ccgRank === "number" && Number.isFinite(store.ccgRank) ? percentLabel(store.ccgRank) : null;
   const badges = BADGES.filter((b) => store[b.flag] === true);
+  const dongLoc = dongLocOf(store.address);
+  // 동 이름만 쓴 loc("역삼동")도 같은 동으로 본다(마지막 토큰 비교)
+  const lastToken = (v: string) => v.trim().split(/\s+/).pop();
+  const sameArea = dongLoc !== null && !!analysisLoc && lastToken(analysisLoc) === lastToken(dongLoc);
+  const areaHref = dongLoc && !sameArea ? analysisHref({ kind: "loc", loc: dongLoc }) : null;
   const openHelp = help && help.id === store.id ? BADGES.find((b) => b.flag === help.flag && store[b.flag] === true) : undefined;
 
   // 매장이 바뀔 때마다 연 요소를 기억하고(영수증 안의 요소는 빼고) 제목으로 포커스를 옮긴다.
@@ -120,7 +138,7 @@ export function Receipt({
             <h2 id={titleId} ref={headRef} tabIndex={-1} className="rc__name">
               {displayName(store.name)}
             </h2>
-            <BookmarkButton store={store} className="rc__bookmark" />
+            <BookmarkButton store={store} className="rc__bookmark" live={live} />
           </div>
           <div className="rc__hero">
             {rank ? (
@@ -204,6 +222,11 @@ export function Receipt({
           <p className="rc__copied" role="status" data-ok={copy?.ok ? "true" : "false"}>
             {copyNote}
           </p>
+          {areaHref ? (
+            <Link href={areaHref} prefetch={false} className="link rc__area" data-testid="rc-area">
+              {AREA_LINK_TEXT}
+            </Link>
+          ) : null}
           <hr className="rc__dash" />
           <dl className="rc__list">
             <Row label="전국 동일 업종 매출 상위">
@@ -245,7 +268,8 @@ export function Receipt({
             <h3 className="rc__minetitle" id={mineId}>
               내 기록
             </h3>
-            <CrmEditor key={store.id} store={store} />
+            <CrmFacts key={store.id} store={store} live={live} />
+            <CrmEditor key={store.id} store={store} live={live} />
             <div className="rc__visits">
               <VisitControls store={store} />
             </div>

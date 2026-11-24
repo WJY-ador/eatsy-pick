@@ -6,6 +6,7 @@ import { Receipt } from "@/components/home/Receipt";
 import { StoreMap } from "@/components/StoreMap";
 import { distanceLabel, distanceM } from "@/lib/store-view";
 import type { Store } from "@/lib/stores";
+import { holdTop, topStuck } from "@/lib/top-fold";
 import { setAreaMapOpen, useAreaMapOpen } from "./map-state";
 
 type Point = { lat: number; lng: number };
@@ -57,12 +58,14 @@ export function AreaMapPanel({ stores, center, centerName, what }: { stores: Sto
     window.requestAnimationFrame(() => {
       const el = panelRef.current;
       if (!el) return;
-      const top = stickyBottom() + GAP;
+      // 768px 미만은 상단 바의 지금 상태(접힘, 펼침)로 높이를 잡고, 굴리는 동안 그 상태를 묶는다.
+      const top = (topStuck() ?? stickyBottom()) + GAP;
       const r = el.getBoundingClientRect();
       let dy = 0;
       if (r.top < top) dy = r.top - top;
       else if (r.bottom > window.innerHeight - GAP) dy = Math.min(r.bottom - (window.innerHeight - GAP), r.top - top);
       if (dy !== 0) {
+        holdTop();
         const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
         window.scrollTo({ top: window.scrollY + dy, behavior: still ? "auto" : "smooth" });
       }
@@ -126,6 +129,7 @@ export function AreaMapPanel({ stores, center, centerName, what }: { stores: Sto
           distance={center ? distanceLabel(distanceM(center, selected)) : null}
           distanceBasis={center && centerName ? `${centerName} 기준` : null}
           onClose={close}
+          live
         />
       ) : null}
     </div>

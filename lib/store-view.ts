@@ -1,5 +1,7 @@
 // Store를 화면 문구로 바꾸는 규칙. proj4를 import하지 않는다(클라이언트 번들용).
 
+import { legalDong } from "./geocode";
+import { shortSido } from "./my-areas";
 import { customerLabel, hoursLabel, peakLabel } from "./labels";
 import type { Store } from "./stores";
 
@@ -52,4 +54,42 @@ export function displayName(name: string): string {
     if (kept.length > 0) return kept.join("/");
   }
   return tidy(name) || name;
+}
+
+/** 한글로 시작하는 동, 숫자 + 가 토큰만 법정동 꼴로 받는다("101동", "B동" 같은 건물 동과 "오렌지상가" 같은 상가 이름은 버린다) */
+function dongToken(raw: string): string | null {
+  const t = raw.trim();
+  if (!/^[가-힣][가-힣\d]*$/.test(t) || (/가$/.test(t) && !/\d가$/.test(t))) return null;
+  return legalDong(t);
+}
+
+function dongOf(address: string, head: string[], sigungu: number): string | null {
+  for (const m of address.matchAll(/\(([^()]*)/g)) {
+    const d = dongToken(m[1].split(/[,.\s]/)[0]);
+    if (d) return d;
+  }
+  // 지번 주소: 시군구 바로 뒤 토큰. 도로명은 로, 길로 끝나 동이나 가로 끝나는 토큰과 겹치지 않는다
+  const t = head[sigungu];
+  return sigungu >= 1 && t && /(동|가)$/.test(t) ? dongToken(t) : null;
+}
+
+/**
+ * 매장 주소(merAddr) → 상권 분석 loc("중구 다동", "분당구 백현동", "포천시 동교동"). 동 앞에 시군구를 붙인다.
+ * 동 이름만으로는 다른 시군구가 섞인다(2026-11-24 실측: 다동 100건 중 서울 중구 30건, 중구 다동 98건).
+ * 시와 구가 둘 다 있으면 구만 붙인다(성남시 분당구 → 분당구). 시군구가 없는 세종은 시도를 붙인다(세종 보람동).
+ * 동: 도로명 주소는 괄호 안 첫 값("논현로 325 (역삼동)", "(대치동, (주)케이티앤지타워)", "(불광동.1층)", "(신림동)지하1층"),
+ * 지번 주소는 시군구 바로 뒤 토큰("서울 강남구 역삼동 123-4", "서울 강남구 대치동 테헤란로 508").
+ * 읍, 면 주소는 null이다. 도로명 괄호에 동이 없고 건물 이름만 있다(2026-11-24 표본 654건 중 동 0건). 구나 읍으로 대신 넓히지 않는다.
+ */
+export function dongLocOf(address: unknown): string | null {
+  if (typeof address !== "string") return null;
+  const tokens = address.split("(")[0].trim().split(/\s+/);
+  const head = tokens.slice(1);
+  if (head.some((t) => /[가-힣](읍|면)$/.test(t))) return null;
+  let n = 0;
+  while (n < head.length && /^[가-힣]+(시|군|구)$/.test(head[n])) n++;
+  const dong = dongOf(address, head, n);
+  if (!dong) return null;
+  const area = n > 0 ? head[n - 1] : shortSido(tokens[0] ?? "");
+  return area ? `${area} ${dong}` : null;
 }

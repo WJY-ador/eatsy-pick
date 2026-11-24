@@ -4,6 +4,7 @@ import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 import { useEffect, useRef } from "react";
 import { TILE_ATTRIBUTION, TILE_GRAYSCALE, TILE_MAX_ZOOM, TILE_URL } from "@/lib/map-tiles";
+import { widthKm } from "@/lib/area-search";
 import { type PinRank, clusterButton, clusterPins, markPin, pinButton, placePinTags, topRanked } from "@/lib/pin-label";
 import { displayName } from "@/lib/store-view";
 import type { MapAdapterProps } from "./StoreMap";
@@ -24,6 +25,11 @@ const TAG_ZOOM = 17;
 /** 이 단계 이상이면 묶지 않는다. 같은 건물 매장처럼 확대해도 안 풀리는 묶음이 생기지 않게 한다 */
 const NO_CLUSTER_ZOOM = 18;
 
+/** 사용자 제스처(끌기, 휠, 두 손가락, 방향키, 확대와 축소 버튼, 묶음 누름) 뒤 이 시간(ms) 안에 끝난 이동만 사용자 이동으로 본다 */
+const GESTURE_MS = 1500;
+/** 지도를 옮기는 방향키와 확대, 축소 키 */
+const MOVE_KEYS = new Set(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "+", "-", "=", "_"]);
+
 type Pin = { m: L.Marker; el: HTMLButtonElement; at: L.LatLng; rank: number | null };
 type Mode = "home" | "all" | "user";
 
@@ -31,7 +37,7 @@ function meIcon(): L.DivIcon {
   return L.divIcon({ className: "smme", html: '<span class="smme__dot"></span>', iconSize: [28, 28], iconAnchor: [14, 14] });
 }
 
-export default function StoreMapLeaflet({ stores, selectedId, onSelect, me, near, focus, hoverId, labelTop, apiRef }: MapAdapterProps) {
+export default function StoreMapLeaflet({ stores, selectedId, onSelect, me, near, focus, hoverId, labelTop, apiRef, onUserView, locked }: MapAdapterProps) {
   const boxRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const pinsRef = useRef<Map<string, Pin>>(new Map());
@@ -45,6 +51,9 @@ export default function StoreMapLeaflet({ stores, selectedId, onSelect, me, near
   const hoverRef = useRef(hoverId);
   const modeRef = useRef<Mode>("home");
   const pendingRef = useRef(false);
+  const lockedRef = useRef(locked);
+  /** 마지막 사용자 제스처 시각(performance.now). 현 지도에서 검색 버튼은 제스처로 시작된 이동에만 뜬다 */
+  const gestureAtRef = useRef(0);
 
   useEffect(() => {
     onSelectRef.current = onSelect;
@@ -128,6 +137,7 @@ export default function StoreMapLeaflet({ stores, selectedId, onSelect, me, near
       const b = L.latLngBounds(ids.map((id) => (pins.get(id) as Pin).at));
       const el = clusterButton(ids.length, () => {
         modeRef.current = "user";
+        gestureAtRef.current = performance.now();
         map.fitBounds(b, { paddingTopLeft: FIT_TOP_LEFT, paddingBottomRight: FIT_BOTTOM_RIGHT, maxZoom: NO_CLUSTER_ZOOM });
       });
       L.DomEvent.disableClickPropagation(el);
@@ -171,10 +181,12 @@ export default function StoreMapLeaflet({ stores, selectedId, onSelect, me, near
     apiRef.current = {
       zoomIn: () => {
         modeRef.current = "user";
+        gestureAtRef.current = performance.now();
         map.zoomIn();
       },
       zoomOut: () => {
         modeRef.current = "user";
+        gestureAtRef.current = performance.now();
         map.zoomOut();
       },
       fit: () => {
@@ -186,6 +198,10 @@ export default function StoreMapLeaflet({ stores, selectedId, onSelect, me, near
         if (!m) return;
         modeRef.current = "user";
         map.setView(m.getLatLng(), Math.max(map.getZoom(), ME_ZOOM), { animate: !still });
+      },
+      setTouchDrag: (on) => {
+        if (on || !lockedRef.current) map.dragging.enable();
+        else map.dragging.disable();
       },
     };
     // 사용자가 지도를 만지면(끌기, 휠, 방향키) 그 뒤로는 보기를 다시 맞추지 않는다. 핀과 묶음 버튼 누름은 만짐으로 치지 않는다.
@@ -220,6 +236,13 @@ export default function StoreMapLeaflet({ stores, selectedId, onSelect, me, near
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // 터치 잠금: 한 손가락 끌기를 끈다(두 손가락일 때는 StoreMap이 setTouchDrag로 잠깐 푼다).
+  useEffect(() => {
+    lockedRef.current = locked;
+    apiRef.current?.setTouchDrag(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [locked]);
 
   // 핀은 매장 id 집합이 바뀔 때만 다시 만든다(같은 집합의 새 배열이면 그대로 둔다). 바뀌면 첫 화면 규칙으로 돌아간다.
   const idsKey = stores
@@ -295,6 +318,65 @@ export default function StoreMapLeaflet({ stores, selectedId, onSelect, me, near
     tags();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hoverId]);
+
+  // 현 지도에서 검색(홈 지도만): 사용자 상태에서 범위가 바뀌면 그 범위와 제스처 여부를, 자동 맞춤(home, all)이면 null을 알린다.
+  // 제스처 여부: 끌기, 휠, 두 손가락, 방향키, 확대와 축소 버튼, 묶음 누름 뒤 GESTURE_MS 안에 끝난 이동. 빈 지도 탭만으로 user가 된 뒤
+  // 목록 선택의 panTo로 바뀐 범위는 제스처가 아니다(받는 쪽이 버튼을 새로 띄우지 않는다).
+  // 자동 맞춤 뒤의 중심과 단계를 기준으로 두고, 사용자 상태라도 기준과 같으면 알리지 않는다(빈 지도를 누른 뒤 크기만 바뀐 경우).
+  const onUserViewRef = useRef(onUserView);
+  useEffect(() => {
+    onUserViewRef.current = onUserView;
+  }, [onUserView]);
+  useEffect(() => {
+    const map = mapRef.current;
+    const box = boxRef.current;
+    if (!map || !box) return;
+    const mark = () => {
+      gestureAtRef.current = performance.now();
+    };
+    const markTouch = (e: TouchEvent) => {
+      if (e.touches.length >= 2) {
+        modeRef.current = "user";
+        mark();
+      }
+    };
+    const markKey = (e: KeyboardEvent) => {
+      if (MOVE_KEYS.has(e.key)) mark();
+    };
+    map.on("dragstart dragend", mark);
+    box.addEventListener("wheel", mark, { passive: true });
+    box.addEventListener("touchstart", markTouch, { passive: true });
+    box.addEventListener("touchmove", markTouch, { passive: true });
+    box.addEventListener("keydown", markKey);
+    const keyNow = () => {
+      const c = map.getCenter();
+      return `${c.lat.toFixed(6)},${c.lng.toFixed(6)},${map.getZoom()}`;
+    };
+    let base = modeRef.current === "user" ? "" : keyNow();
+    const report = () => {
+      const cb = onUserViewRef.current;
+      if (!cb) return;
+      const key = keyNow();
+      if (modeRef.current !== "user") {
+        base = key;
+        cb(null, false);
+        return;
+      }
+      if (key === base) return;
+      const c = map.getCenter();
+      const b = map.getBounds();
+      cb({ lat: c.lat, lng: c.lng, widthKm: widthKm(c.lat, b.getWest(), b.getEast()) }, performance.now() - gestureAtRef.current < GESTURE_MS);
+    };
+    map.on("moveend", report);
+    return () => {
+      map.off("moveend", report);
+      map.off("dragstart dragend", mark);
+      box.removeEventListener("wheel", mark);
+      box.removeEventListener("touchstart", markTouch);
+      box.removeEventListener("touchmove", markTouch);
+      box.removeEventListener("keydown", markKey);
+    };
+  }, []);
 
   return <div ref={boxRef} className="storemap__frame" role="region" aria-label="매장 지도" />;
 }

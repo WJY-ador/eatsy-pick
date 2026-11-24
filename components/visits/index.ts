@@ -5,3 +5,4 @@ export { CrmEditor } from "./CrmEditor";
 export { UnsaveNotice } from "./UnsaveNotice";
 export { NextPlan } from "./NextPlan";
 export { MySaves } from "./MySaves";
+export { CrmFacts } from "./CrmFacts";

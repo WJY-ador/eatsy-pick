@@ -29,6 +29,7 @@ import {
 import { customerLabel, peakLabel } from "@/lib/labels";
 import { displayName } from "@/lib/store-view";
 import type { AreaDataset, Store } from "@/lib/stores";
+import { holdTop } from "@/lib/top-fold";
 import { PeakTable } from "./Charts";
 import { useHelp } from "./Help";
 import { PyramidChart } from "./Pyramid";
@@ -267,10 +268,14 @@ export function AnalysisView({ dataset, scope, fellBack }: { dataset: AreaDatase
   const bothFlags = applied.local && applied.hoesik;
   const onlyFlag: Flag = applied.local ? "local" : "hoesik";
   // 주소 기록을 남기지 않고 지도 제목으로 옮긴다(해시 이동은 라우터 밖 기록이 생겨 뒤로 가기와 필터가 어긋난다).
+  // 768px 미만은 아래로 옮기므로 상단 바를 접어 묶고, 접힌 머리말 아래에 제목의 scroll-margin-top만큼 띄워 둔다.
   const toMap = () => {
     const h = document.getElementById("map-title");
-    h?.scrollIntoView({ block: "start" });
-    h?.focus({ preventScroll: true });
+    if (!h) return;
+    const top = holdTop(true);
+    if (top === null) h.scrollIntoView({ block: "start" });
+    else window.scrollTo({ top: window.scrollY + h.getBoundingClientRect().top - top - (Number.parseFloat(getComputedStyle(h).scrollMarginTop) || 0) });
+    h.focus({ preventScroll: true });
   };
   const empty = dataset.stores.length === 0;
   const food = foodLabel(scope);
@@ -341,8 +346,8 @@ export function AnalysisView({ dataset, scope, fellBack }: { dataset: AreaDatase
         </dl>
         {scope.food ? (
           <p className={s.notice}>
-            잇플 조회에 {food} 조건을 넣어 받은 매장입니다. 아래 업종 막대와 매장 행의 업종은 매장별 원본 업종이며, 업종 막대는 받은 매장
-            안에서 다시 거르는 필터입니다.
+            잇플 조회에 {food} 조건을 넣어 받은 매장입니다. 아래 업종별 매장 수와 매장 행의 업종은 매장별 원본 업종이며, 업종별 매장 수는 받은
+            매장 안에서 다시 거르는 필터입니다.
             <Link className={s.inlineLink} href={analysisPath({ ...scope, food: null }, null)} prefetch={false}>
               업종 없이 다시 조회
             </Link>
@@ -495,7 +500,7 @@ export function AnalysisView({ dataset, scope, fellBack }: { dataset: AreaDatase
                 </h2>
                 {matchCount("map")}
                 <div className={s.mapBox} data-testid="map" data-map-count={shown.length} data-on-map={onMap}>
-                  <StoreMap stores={shown} selectedId={selected} onSelect={setSelectedId} me={null} height={320} />
+                  <StoreMap stores={shown} selectedId={selected} onSelect={setSelectedId} me={null} height={320} touchLock />
                 </div>
               </section>
 
@@ -537,7 +542,14 @@ export function AnalysisView({ dataset, scope, fellBack }: { dataset: AreaDatase
           </div>
         </>
       )}
-      {receiptStore ? <Receipt store={receiptStore} distance={null} distanceBasis={null} onClose={closeReceipt} /> : null}
+      {receiptStore ? <Receipt
+          store={receiptStore}
+          distance={null}
+          distanceBasis={null}
+          onClose={closeReceipt}
+          analysisLoc={scope.kind === "loc" ? scope.loc : null}
+          live
+        /> : null}
     </div>
   );
 }

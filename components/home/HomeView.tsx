@@ -10,11 +10,12 @@ import { NavLink, setNavPending } from "@/components/NavLink";
 import { Sheet } from "@/components/Sheet";
 import { AREAS, areaBySlug } from "@/lib/areas";
 import { briefingOf } from "@/lib/briefing";
+import { areaSearchPick, type MapView } from "@/lib/area-search";
 import { assignSections, SECTION_ORDER, type SectionId } from "@/lib/curation-assign";
 import { evidenceLabel } from "@/lib/evidence";
 import { foodDisplayName } from "@/lib/food";
 import { currentPosition, geolocationGranted, getGeo, type LocateError, setGeo, useGeo } from "@/lib/geo-state";
-import { NOMINATIM_ON, nominatimGeocoder, presetGeocoder, reverseGeocode } from "@/lib/geocode";
+import { geocoderChain, reverseGeocode } from "@/lib/geocode";
 import type { HomeData, SearchState } from "@/lib/home-data";
 import { type HomeScope, type HomeSort, analysisHref, homeHref, scopeName } from "@/lib/home-params";
 import { recommend } from "@/lib/recommend";
@@ -179,8 +180,7 @@ export function HomeView({ data }: { data: HomeData }) {
         }
         return;
       }
-      const chain = NOMINATIM_ON ? [nominatimGeocoder, presetGeocoder(presets)] : [presetGeocoder(presets)];
-      const found = await reverseGeocode(pos.lat, pos.lng, chain);
+      const found = await reverseGeocode(pos.lat, pos.lng, geocoderChain(presets));
       // 자동 확인 중에 사용자가 지역을 직접 골랐으면 덮어쓰지 않는다.
       if (mode === "auto" && (userPicked.current || urlHasChoice())) {
         setGeo({ locating: false });
@@ -272,6 +272,8 @@ export function HomeView({ data }: { data: HomeData }) {
     return m;
   }, [all, search, extra]);
   const selected = selectedId ? (byId.get(selectedId) ?? null) : null;
+  // 지역 조회나 검색 결과에서 온 매장만 지금 조회값이다. extra에만 있는 매장은 내 저장이 넘긴 사본일 수 있다.
+  const selectedLive = !!selected && (all.some((s) => s.id === selected.id) || !!search?.stores?.some((s) => s.id === selected.id));
 
   /** 결제 영수증을 연다(카드, 목록, 핀, 검색 결과, 내 저장 어디서 열든 같은 것 하나) */
   const openStore = useCallback((store: Store, trigger?: HTMLElement | null) => {
@@ -335,6 +337,17 @@ export function HomeView({ data }: { data: HomeData }) {
     userPicked.current = true;
     setRegionPanel(null);
     go(regionHref(to));
+  };
+  // 홈 지도의 현 지도에서 검색: 지도 중심을 역지오코딩(내 위치와 같은 순서 목록)하고, 보이는 가로 폭으로 동, 구, 시를 골라
+  // 지역 칩과 같은 방식으로 이동한다(기록이 남는 이동, 테마, 프랜차이즈 제외, 정렬, 음식 조건 유지). 못 가면 지도 위 안내 문구를 돌려준다.
+  const searchArea = async (v: MapView): Promise<string | null> => {
+    // reverseGeocode는 제공자 실패를 다음 제공자로 넘기고, 모두 실패하면 null이다(areaSearchPick이 실패 안내로 바꾼다).
+    const found = await reverseGeocode(v.lat, v.lng, geocoderChain(presets));
+    const pick = areaSearchPick(found, v.widthKm);
+    if ("note" in pick) return pick.note;
+    if (!h.near && homeHref(pick.scope) === homeHref(scope)) return "지금 보고 있는 지역입니다.";
+    goRegion(pick.scope);
+    return null;
   };
   const onNear = () => {
     // 이미 내 주변이면 다시 묻지 않는다.
@@ -574,6 +587,7 @@ export function HomeView({ data }: { data: HomeData }) {
               onOpen={openStore}
               sort={sort}
               onSort={pickSort}
+              onAreaSearch={searchArea}
             />
           ) : null}
         </>
@@ -610,6 +624,7 @@ export function HomeView({ data }: { data: HomeData }) {
           distance={distanceLabel(distanceOf(selected))}
           distanceBasis={origin ? `${origin.label} 기준` : null}
           onClose={close}
+          live={selectedLive}
           onPeak={() => {
             // 영수증은 그대로 두고 그 위에 차트 시트를 연다. Esc 한 번은 시트만, 두 번째는 영수증을 닫는다.
             setPeakOpen(true);

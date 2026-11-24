@@ -1047,3 +1047,75 @@
     transition: none;
   }
 }
+
+/* 내 기록의 사실 줄(마지막 다녀왔어요 뒤 날수, 저장할 때와 지금 순위)과 단골 제안 */
+.facts {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.rankLine {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.rankBasis {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--color-muted);
+}
+
+.ask {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--color-ink-2);
+  border-radius: var(--radius-panel);
+}
+
+.askText {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+/* 내 저장 맨 위: 오래 안 간 단골 묶음 */
+.dormant {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--color-ink-2);
+  border-radius: var(--radius-panel);
+}
+
+.dormantTitle {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 700;
+}
+
+.dormantList {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dormantItem {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 8px;
+  min-width: 0;
+}
+
+.dormantItem .nameBtn {
+  text-align: left;
+  overflow-wrap: anywhere;
+}

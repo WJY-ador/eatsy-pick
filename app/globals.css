@@ -48,6 +48,11 @@ h1, h2, h3 { color: var(--color-ink); font-weight: 700; letter-spacing: var(--tr
 .top__link:hover { color: var(--color-ink); text-decoration: underline var(--rule-hair); text-underline-offset: 0.25em; }
 .top__btn { border: 0; background: none; font-family: var(--font-body); cursor: pointer; }
 .top__link:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+/* Phone: scrolling down slides the logo and menu line up under the banner (or off screen) and keeps the search line. Transform only, so the page does not move. lib/top-fold sets data-top-folded and --top-fold */
+@media (max-width: 47.99rem) {
+  .top { transition: transform var(--dur-short) var(--ease-out); }
+  html[data-top-folded] .top { transform: translateY(calc(-1 * var(--top-fold, 0px))); }
+}
 @media (min-width: 48rem) {
   .top__in { grid-template-columns: auto minmax(0, 36rem) auto; grid-template-areas: "logo search nav"; justify-content: space-between; column-gap: var(--space-lg); padding-block: var(--space-xs); }
 }

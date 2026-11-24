@@ -106,12 +106,14 @@ html[data-nav="pending"] .feed > :is(.feed__top, .cur, .found, .state, .mapsec, 
 .brief__go:hover { color: var(--color-cta-text); }
 .brief__go:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; border-radius: 4px; }
 
-/* Briefing and my-saves summary: side by side from 1024px; below that the summary is one 44px line under the briefing.
-   The summary box keeps the same size before and after the device data arrives, so nothing below it jumps:
-   one line on a phone, a fixed minimum height with one-line pattern rows on a desktop. */
+/* Briefing and my-saves summary: side by side from 1024px; below that the summary sits under the briefing as a 44px swiping chip row
+   plus one pattern line outside the swipe. The summary box keeps the same size before and after the device data arrives, so nothing below it jumps:
+   a fixed 64px block on a phone in every state (before hydration, no saves, holds only, pattern), a fixed minimum height with one-line pattern rows on a desktop. */
 .feed__top { display: grid; gap: var(--space-md); min-width: 0; }
-.taste { display: flex; align-items: center; gap: var(--space-xs); min-width: 0; height: 44px; margin-inline: calc(-1 * var(--gutter)); padding-inline: var(--gutter); overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; }
-.taste::-webkit-scrollbar { display: none; }
+.taste { display: grid; grid-template-rows: 44px 18px; row-gap: var(--space-3xs); align-content: start; min-width: 0; height: 64px; }
+/* Chip row swipes to the screen's left edge and fades at the content's right edge, like the theme and region rows above */
+.taste__row { display: flex; align-items: center; gap: var(--space-xs); min-width: 0; margin-left: calc(-1 * var(--gutter)); padding-inline: var(--gutter) var(--space-lg); scroll-padding-inline: var(--gutter); overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; mask-image: linear-gradient(to right, var(--color-ink) calc(100% - var(--space-lg)), transparent); }
+.taste__row::-webkit-scrollbar { display: none; }
 .taste__k { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .taste__open { flex-shrink: 0; display: inline-flex; align-items: center; gap: var(--space-3xs); min-height: 44px; padding: 0 var(--space-2xs) 0 0; border: 0; background: none; color: var(--color-ink); font: 700 var(--text-sm)/1 var(--font-body); white-space: nowrap; cursor: pointer; }
 .taste__open-all { display: none; }
@@ -121,13 +123,17 @@ html[data-nav="pending"] .feed > :is(.feed__top, .cur, .found, .state, .mapsec, 
 .taste__stage .num { font-weight: 800; color: var(--color-ink); }
 @media (hover: hover) { .taste__stage:hover { border-color: var(--color-muted); } }
 .taste__open:focus-visible, .taste__stage:focus-visible { outline: 2px solid var(--color-focus); outline-offset: -2px; border-radius: var(--radius-pill); }
-.taste__empty { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; font-size: var(--text-sm); color: var(--color-ink-2); line-height: 1.35; }
+.taste__empty { grid-row: 1 / -1; align-self: center; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; font-size: var(--text-sm); color: var(--color-ink-2); line-height: 1.35; }
 .taste__pattern, .taste__note { display: none; }
+.taste__sum { min-width: 0; margin: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: var(--text-xs); line-height: 18px; color: var(--color-ink-2); }
 @media (min-width: 64rem) {
   .feed__top { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: stretch; }
-  .taste { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-content: start; gap: var(--space-xs) var(--space-sm); height: auto; min-height: 13rem; margin: 0; padding: var(--space-sm) var(--space-md); overflow: visible; border: var(--rule-hair) solid var(--color-rule); border-radius: var(--radius-panel); background: var(--color-bg); }
+  .taste { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: none; align-content: start; gap: var(--space-xs) var(--space-sm); height: auto; min-height: 13rem; margin: 0; padding: var(--space-sm) var(--space-md); overflow: visible; border: var(--rule-hair) solid var(--color-rule); border-radius: var(--radius-panel); background: var(--color-bg); }
   .taste__k { position: static; width: auto; height: auto; overflow: visible; clip-path: none; align-self: center; font-size: var(--text-sm); font-weight: 700; color: var(--color-ink-2); }
   .taste__open { justify-self: end; margin-block: calc(-1 * var(--space-2xs)); padding: 0; text-decoration: underline var(--rule-hair); text-underline-offset: 0.25em; }
+  .taste__row { display: contents; mask-image: none; }
+  .taste__sum { display: none; }
+  .taste__empty { grid-row: auto; align-self: auto; }
   .taste__open-label { display: none; }
   .taste__open-all { display: inline; }
   .taste__stages, .taste__empty, .taste__pattern, .taste__note { grid-column: 1 / -1; }

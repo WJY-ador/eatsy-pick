@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { KAKAO_MAP_KEY } from "@/lib/map-provider";
+import { loadKakaoSdk } from "@/lib/kakao-sdk";
+import { widthKm } from "@/lib/area-search";
 import { type PinRank, clusterButton, clusterPins, markPin, pinButton, placePinTags, topRanked } from "@/lib/pin-label";
 import { displayName } from "@/lib/store-view";
 import type { MapAdapterProps } from "./StoreMap";
@@ -18,14 +19,16 @@ import type { MapAdapterProps } from "./StoreMap";
 
 /* 쓰는 부분만 적은 최소 타입 */
 type KLatLng = { getLat(): number; getLng(): number };
-type KBounds = { extend(p: KLatLng): void; isEmpty(): boolean; contain(p: KLatLng): boolean };
+type KBounds = { extend(p: KLatLng): void; isEmpty(): boolean; contain(p: KLatLng): boolean; getSouthWest(): KLatLng; getNorthEast(): KLatLng };
 type KMap = {
   setBounds(b: KBounds, t?: number, r?: number, bt?: number, l?: number): void;
   getBounds(): KBounds;
+  getCenter(): KLatLng;
   panTo(p: KLatLng): void;
   setCenter(p: KLatLng): void;
   getLevel(): number;
   setLevel(lv: number): void;
+  setDraggable(on: boolean): void;
   relayout(): void;
   getProjection(): { containerPointFromCoords(p: KLatLng): { x: number; y: number } };
 };
@@ -46,34 +49,9 @@ declare global {
   }
 }
 
-const SDK = "https://dapi.kakao.com/v2/maps/sdk.js";
-const LOAD_TIMEOUT_MS = 8000;
-let loading: Promise<KakaoNS> | null = null;
-
-/** SDK를 한 번만 불러온다. 실패하면 다음 시도를 위해 비운다 */
+/** SDK를 한 번만 불러온다(lib/kakao-sdk.ts, 역지오코딩과 같은 스크립트). 실패하면 다음 시도를 위해 비운다 */
 function loadKakao(): Promise<KakaoNS> {
-  if (loading) return loading;
-  loading = new Promise<KakaoNS>((resolve, reject) => {
-    const timer = window.setTimeout(() => reject(new Error("kakao sdk timeout")), LOAD_TIMEOUT_MS);
-    const done = (fn: () => void) => {
-      window.clearTimeout(timer);
-      fn();
-    };
-    const s = document.createElement("script");
-    s.src = `${SDK}?${new URLSearchParams({ appkey: KAKAO_MAP_KEY, autoload: "false" }).toString()}`;
-    s.async = true;
-    s.onerror = () => done(() => reject(new Error("kakao sdk load error")));
-    s.onload = () => {
-      const k = window.kakao;
-      if (!k?.maps?.load) return done(() => reject(new Error("kakao sdk not ready")));
-      k.maps.load(() => done(() => resolve(k)));
-    };
-    document.head.appendChild(s);
-  }).catch((e) => {
-    loading = null;
-    throw e;
-  });
-  return loading;
+  return loadKakaoSdk<KakaoNS>();
 }
 
 // 범위 맞춤 여백(px). 위는 상권 전체 보기 줄, 오른쪽은 확대, 축소, 내 위치 열을 비킨다.
@@ -91,6 +69,9 @@ const NO_CLUSTER_LEVEL = 2;
 const MIN_LEVEL = 1;
 const MAX_LEVEL = 14;
 
+/** 사용자 제스처(끌기, 휠, 두 손가락, 확대와 축소 버튼, 묶음 누름) 뒤 이 시간(ms) 안에 끝난 이동만 사용자 이동으로 본다 */
+const GESTURE_MS = 1500;
+
 type Pin = { ov: KOverlay; el: HTMLButtonElement; pos: KLatLng; rank: number | null };
 type Mode = "home" | "all" | "user";
 
@@ -103,7 +84,7 @@ function kakaoMarks(box: HTMLElement): Element[] {
   return [top];
 }
 
-export default function StoreMapKakao({ stores, selectedId, onSelect, me, near, focus, hoverId, labelTop, apiRef, onFail }: MapAdapterProps & { onFail: () => void }) {
+export default function StoreMapKakao({ stores, selectedId, onSelect, me, near, focus, hoverId, labelTop, apiRef, onUserView, locked, onFail }: MapAdapterProps & { onFail: () => void }) {
   const boxRef = useRef<HTMLDivElement>(null);
   const kRef = useRef<KakaoNS | null>(null);
   const mapRef = useRef<KMap | null>(null);
@@ -118,6 +99,9 @@ export default function StoreMapKakao({ stores, selectedId, onSelect, me, near, 
   const selectedRef = useRef(selectedId);
   const hoverRef = useRef(hoverId);
   const modeRef = useRef<Mode>("home");
+  const lockedRef = useRef(locked);
+  /** 마지막 사용자 제스처 시각(performance.now). 현 지도에서 검색 버튼은 제스처로 시작된 이동에만 뜬다 */
+  const gestureAtRef = useRef(0);
   /** 마지막으로 묶음을 계산한 단계. 단계가 그대로인 이동(끌기)에서는 다시 묶지 않는다 */
   const clusteredLevelRef = useRef<number | null>(null);
   // 지도가 준비되면 올려서 핀, 내 위치, 선택 효과를 다시 돌린다.
@@ -215,6 +199,7 @@ export default function StoreMapKakao({ stores, selectedId, onSelect, me, near, 
       }
       const el = clusterButton(ids.length, () => {
         modeRef.current = "user";
+        gestureAtRef.current = performance.now();
         map.setBounds(b, PAD.top, PAD.right, PAD.bottom, PAD.left);
         if (map.getLevel() < NO_CLUSTER_LEVEL) map.setLevel(NO_CLUSTER_LEVEL);
       });
@@ -247,10 +232,12 @@ export default function StoreMapKakao({ stores, selectedId, onSelect, me, near, 
         apiRef.current = {
           zoomIn: () => {
             modeRef.current = "user";
+            gestureAtRef.current = performance.now();
             map.setLevel(Math.max(MIN_LEVEL, map.getLevel() - 1));
           },
           zoomOut: () => {
             modeRef.current = "user";
+            gestureAtRef.current = performance.now();
             map.setLevel(Math.min(MAX_LEVEL, map.getLevel() + 1));
           },
           fit: () => {
@@ -264,6 +251,7 @@ export default function StoreMapKakao({ stores, selectedId, onSelect, me, near, 
             if (map.getLevel() > ME_LEVEL) map.setLevel(ME_LEVEL);
             map.setCenter(m.pos);
           },
+          setTouchDrag: (on) => map.setDraggable(on || !lockedRef.current),
         };
         setReadyTick((v) => v + 1);
       })
@@ -302,6 +290,14 @@ export default function StoreMapKakao({ stores, selectedId, onSelect, me, near, 
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // 터치 잠금: 한 손가락 끌기를 끈다(두 손가락일 때는 StoreMap이 setTouchDrag로 잠깐 푼다).
+  // 지도는 SDK를 불러온 뒤 생기므로 readyTick에도 다시 건다.
+  useEffect(() => {
+    lockedRef.current = locked;
+    apiRef.current?.setTouchDrag(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [locked, readyTick]);
 
   // 핀은 매장 id 집합이 바뀔 때만 다시 만든다. 바뀌면 첫 화면 규칙으로 돌아간다.
   const idsKey = stores
@@ -385,6 +381,63 @@ export default function StoreMapKakao({ stores, selectedId, onSelect, me, near, 
     tags();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hoverId]);
+
+  // 현 지도에서 검색(홈 지도만): 사용자 상태에서 범위가 바뀌면 그 범위와 제스처 여부를, 자동 맞춤(home, all)이면 null을 알린다.
+  // 제스처 여부: 끌기, 휠, 두 손가락, 확대와 축소 버튼, 묶음 누름 뒤 GESTURE_MS 안에 끝난 이동. 빈 지도 탭만으로 user가 된 뒤
+  // 목록 선택의 panTo로 바뀐 범위는 제스처가 아니다(받는 쪽이 버튼을 새로 띄우지 않는다).
+  // 자동 맞춤 뒤의 중심과 단계를 기준으로 두고, 사용자 상태라도 기준과 같으면 알리지 않는다(빈 지도를 누른 뒤 크기만 바뀐 경우).
+  const onUserViewRef = useRef(onUserView);
+  useEffect(() => {
+    onUserViewRef.current = onUserView;
+  }, [onUserView]);
+  useEffect(() => {
+    const k = kRef.current;
+    const map = mapRef.current;
+    const box = boxRef.current;
+    if (!k || !map || !box) return;
+    const mark = () => {
+      gestureAtRef.current = performance.now();
+    };
+    const markTouch = (e: TouchEvent) => {
+      if (e.touches.length >= 2) {
+        modeRef.current = "user";
+        mark();
+      }
+    };
+    k.maps.event.addListener(map, "dragstart", mark);
+    k.maps.event.addListener(map, "dragend", mark);
+    box.addEventListener("wheel", mark, { passive: true });
+    box.addEventListener("touchstart", markTouch, { passive: true });
+    box.addEventListener("touchmove", markTouch, { passive: true });
+    const keyNow = () => {
+      const c = map.getCenter();
+      return `${c.getLat().toFixed(6)},${c.getLng().toFixed(6)},${map.getLevel()}`;
+    };
+    let base = modeRef.current === "user" ? "" : keyNow();
+    const report = () => {
+      const cb = onUserViewRef.current;
+      if (!cb) return;
+      const key = keyNow();
+      if (modeRef.current !== "user") {
+        base = key;
+        cb(null, false);
+        return;
+      }
+      if (key === base) return;
+      const c = map.getCenter();
+      const b = map.getBounds();
+      cb({ lat: c.getLat(), lng: c.getLng(), widthKm: widthKm(c.getLat(), b.getSouthWest().getLng(), b.getNorthEast().getLng()) }, performance.now() - gestureAtRef.current < GESTURE_MS);
+    };
+    k.maps.event.addListener(map, "idle", report);
+    return () => {
+      k.maps.event.removeListener(map, "idle", report);
+      k.maps.event.removeListener(map, "dragstart", mark);
+      k.maps.event.removeListener(map, "dragend", mark);
+      box.removeEventListener("wheel", mark);
+      box.removeEventListener("touchstart", markTouch);
+      box.removeEventListener("touchmove", markTouch);
+    };
+  }, [readyTick]);
 
   return <div ref={boxRef} className="storemap__frame" role="region" aria-label="매장 지도" />;
 }
