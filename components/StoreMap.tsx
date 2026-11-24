@@ -41,6 +41,13 @@ export type StoreMapProps = {
    * 핀 누름과 지도 위 버튼은 그대로 된다. false면 한 손가락 끌기를 지도가 모두 받는다.
    */
   touchAxis?: boolean;
+  /**
+   * 옮긴 동네 핀(홈 지도만, lib/area-search.ts). 지금 범위 핀과 다른 옅은 점으로 그리고 묶지 않는다.
+   * 이 핀은 보기 상태(첫 화면 맞춤, 상권 전체 보기 범위)와 이름 글자에 넣지 않는다
+   */
+  panStores?: Pick<Store, "id" | "name" | "lat" | "lng">[];
+  /** 옮긴 동네 핀을 누르면 그 매장 id로 부른다 */
+  onPanPick?: (id: string) => void;
 };
 
 /** 지도 위 버튼이 어댑터에 시키는 일. 어댑터가 지도를 만든 뒤 채운다 */
@@ -59,7 +66,7 @@ export type MapApi = {
  * 어댑터가 받는 props. 버튼은 StoreMap이 그리고, 어댑터는 지도, 핀, 묶음만 맡는다.
  * 보기 상태는 어댑터 안에서 하나로 관리한다: home(첫 화면 규칙), all(상권 전체 보기), user(사용자가 움직인 뒤에는 그대로 둔다).
  */
-export type MapAdapterProps = Pick<StoreMapProps, "stores" | "selectedId" | "onSelect" | "me" | "onUserView"> & {
+export type MapAdapterProps = Pick<StoreMapProps, "stores" | "selectedId" | "onSelect" | "me" | "onUserView" | "panStores" | "onPanPick"> & {
   near: boolean;
   focus: Point | null;
   hoverId: string | null;
@@ -173,6 +180,8 @@ export function StoreMap({
   onUserView,
   overlay = null,
   touchAxis = false,
+  panStores,
+  onPanPick,
 }: StoreMapProps): JSX.Element {
   const [kakaoFailed, setKakaoFailed] = useState(false);
   const useKakao = MAP_PROVIDER === "kakao" && !kakaoFailed;
@@ -264,7 +273,7 @@ export function StoreMap({
     };
   }, [axis]);
 
-  const adapter: MapAdapterProps = { stores, selectedId, onSelect, me, near, focus, hoverId, labelTop, apiRef, onUserView };
+  const adapter: MapAdapterProps = { stores, selectedId, onSelect, me, near, focus, hoverId, labelTop, apiRef, onUserView, panStores, onPanPick };
   return (
     <div className="storemap" style={{ "--storemap-h": `${height}px` } as React.CSSProperties}>
       <div ref={wrapRef} className="storemap__wrap" data-touch-axis={axis ? "" : undefined}>

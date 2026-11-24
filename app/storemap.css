@@ -43,6 +43,11 @@
 .smpin__dot { display: block; width: 16px; height: 16px; border-radius: 50%; background: var(--color-panel); border: 3px solid var(--color-data); transition: transform var(--dur-micro) var(--ease-out); }
 .smpin.is-hover .smpin__dot { transform: scale(1.35); border-color: var(--color-ink); }
 .smpin.is-selected .smpin__dot { width: 26px; height: 26px; background: var(--color-select); border: 3px solid var(--color-panel); box-shadow: 0 0 0 2px var(--color-select-text); }
+/* 옮긴 동네 핀: 지금 범위 핀보다 작고 옅다. 묶지 않고 이름 글자를 켜지 않는다.
+   누름 영역은 24px(WCAG 2.5.8 최소). 빽빽한 동네에서 핀 위에서 시작한 끌기가 지도로 가지 않는 자리를 줄인다 */
+.smpin--far { width: 24px; height: 24px; }
+.smpin--far .smpin__dot { width: 12px; height: 12px; border-width: 2px; border-color: var(--color-data-3); background: var(--color-panel); opacity: 0.75; }
+.smpin--far:hover .smpin__dot { border-color: var(--color-data); opacity: 1; }
 .smpin:focus-visible { outline: 3px solid var(--color-focus); outline-offset: -4px; border-radius: 50%; }
 
 /* Store name tag beside a pin, cut with an ellipsis past about ten characters. Positioned out of flow so the 44px hit area and anchor never move.

@@ -10,7 +10,7 @@ import { NavLink, setNavPending } from "@/components/NavLink";
 import { Sheet } from "@/components/Sheet";
 import { AREAS, areaBySlug } from "@/lib/areas";
 import { briefingOf } from "@/lib/briefing";
-import { areaSearchPick, type MapView } from "@/lib/area-search";
+import { AREA_SEARCH_MAX_KM, areaSearchPick, insideStores, loadPanStores, type MapView, PAN_WAIT_MS, type PanStore } from "@/lib/area-search";
 import { assignSections, SECTION_ORDER, type SectionId } from "@/lib/curation-assign";
 import { evidenceLabel } from "@/lib/evidence";
 import { foodDisplayName } from "@/lib/food";
@@ -19,7 +19,7 @@ import { geocoderChain, reverseGeocode } from "@/lib/geocode";
 import type { HomeData, SearchState } from "@/lib/home-data";
 import { type HomeScope, type HomeSort, analysisHref, homeHref, scopeName } from "@/lib/home-params";
 import { recommend } from "@/lib/recommend";
-import { displayName, distanceLabel, distanceM } from "@/lib/store-view";
+import { displayName, distanceLabel, distanceM, dongLocOf } from "@/lib/store-view";
 import type { Store } from "@/lib/stores";
 import { CURATIONS, isThemeId, matchTheme, type ThemeId, THEMES, Y2030_SUB } from "@/lib/themes";
 import { setHomeContext } from "@/lib/ui-state";
@@ -349,6 +349,60 @@ export function HomeView({ data }: { data: HomeData }) {
     goRegion(pick.scope);
     return null;
   };
+
+  // 옮긴 동네 핀(lib/area-search.ts 머리 주석): 제스처 이동이 끝나고 PAN_WAIT_MS 멈추면, 폭과 지금 매장 범위를 먼저 보고
+  // 역지오코딩과 범위 고르기를 거쳐 다른 범위일 때만 받는다. 마지막 이동의 결과만 쓴다. 자동 맞춤으로 돌아가면 지운다.
+  const [panned, setPanned] = useState<{ scope: HomeScope; stores: PanStore[] } | null>(null);
+  const panTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const panSeq = useRef(0);
+  useEffect(
+    () => () => {
+      if (panTimer.current !== null) clearTimeout(panTimer.current);
+      panSeq.current += 1;
+    },
+    [],
+  );
+  const onPanView = useCallback(
+    (v: MapView | null) => {
+      if (panTimer.current !== null) clearTimeout(panTimer.current);
+      panTimer.current = null;
+      const seq = ++panSeq.current;
+      if (v === null) {
+        setPanned(null);
+        return;
+      }
+      if (v.widthKm > AREA_SEARCH_MAX_KM || insideStores(all, v)) return;
+      panTimer.current = setTimeout(() => {
+        panTimer.current = null;
+        void (async () => {
+          const pick = areaSearchPick(await reverseGeocode(v.lat, v.lng, geocoderChain(presets)), v.widthKm);
+          if (seq !== panSeq.current || "note" in pick || homeHref(pick.scope) === homeHref(scope)) return;
+          const list = await loadPanStores(pick.scope);
+          if (seq === panSeq.current && list) setPanned({ scope: pick.scope, stores: list });
+        })();
+      }, PAN_WAIT_MS);
+    },
+    [all, presets, scope],
+  );
+  // 지금 범위에 이미 있는 매장은 빼고, 프랜차이즈 제외와 테마는 지금 핀과 같게 건다.
+  const panShown = useMemo(() => {
+    if (!panned) return [];
+    const have = new Set(all.map((s) => s.id));
+    return panned.stores.filter((s) => !have.has(s.id) && !(exclude && s.franchise) && (theme === "all" || matchTheme(s, theme)));
+  }, [panned, all, exclude, theme]);
+  // 옮긴 동네 핀을 누르면 그 매장 주소의 동(구 + 동)으로 홈 범위를 바꾸고 영수증을 연 채로 그린다(주소 id, 기록 남는 이동).
+  // 동을 못 읽는 주소(읍, 면)는 그 핀을 받아 온 범위로 간다. 음식 조건은 넘기지 않는다(id가 있으면 q를 가게 이름으로 읽는다).
+  const openPanned = useCallback(
+    (id: string) => {
+      const s = panned?.stores.find((x) => x.id === id);
+      if (!panned || !s) return;
+      const dong = dongLocOf(s.address);
+      userPicked.current = true;
+      go(homeHref(dong ? { kind: "loc", loc: dong } : panned.scope, { id: s.id, excludeFranchise: exclude, theme, sort }));
+    },
+    [panned, go, exclude, theme, sort],
+  );
+
   const onNear = () => {
     // 이미 내 주변이면 다시 묻지 않는다.
     if (nearShown) return;
@@ -588,6 +642,9 @@ export function HomeView({ data }: { data: HomeData }) {
               sort={sort}
               onSort={pickSort}
               onAreaSearch={searchArea}
+              onPanView={onPanView}
+              panStores={panShown}
+              onPanPick={openPanned}
             />
           ) : null}
         </>

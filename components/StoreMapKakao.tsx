@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { loadKakaoSdk } from "@/lib/kakao-sdk";
 import { widthKm } from "@/lib/area-search";
-import { type PinRank, clusterButton, clusterPins, markPin, pinButton, placePinTags, topRanked } from "@/lib/pin-label";
+import { type PinRank, clusterButton, clusterPins, markPin, panPinButton, pinButton, placePinTags, topRanked } from "@/lib/pin-label";
 import { displayName } from "@/lib/store-view";
 import type { MapAdapterProps } from "./StoreMap";
 
@@ -83,13 +83,16 @@ function kakaoMarks(box: HTMLElement): Element[] {
   return [top];
 }
 
-export default function StoreMapKakao({ stores, selectedId, onSelect, me, near, focus, hoverId, labelTop, apiRef, onUserView, onFail }: MapAdapterProps & { onFail: () => void }) {
+export default function StoreMapKakao({ stores, selectedId, onSelect, me, near, focus, hoverId, labelTop, apiRef, onUserView, panStores, onPanPick, onFail }: MapAdapterProps & { onFail: () => void }) {
   const boxRef = useRef<HTMLDivElement>(null);
   const kRef = useRef<KakaoNS | null>(null);
   const mapRef = useRef<KMap | null>(null);
   const pinsRef = useRef<Map<string, Pin>>(new Map());
   const clustersRef = useRef<{ ov: KOverlay; el: HTMLButtonElement; ids: string[] }[]>([]);
   const meRef = useRef<{ ov: KOverlay; pos: KLatLng } | null>(null);
+  /** 옮긴 동네 핀. pinsRef와 따로 둔다(보기 맞춤, 묶음, 이름 글자에 넣지 않는다) */
+  const panPinsRef = useRef<KOverlay[]>([]);
+  const onPanPickRef = useRef(onPanPick);
   const labelTopRef = useRef(labelTop);
   const onSelectRef = useRef(onSelect);
   const failRef = useRef(onFail);
@@ -113,7 +116,8 @@ export default function StoreMapKakao({ stores, selectedId, onSelect, me, near, 
     selectedRef.current = selectedId;
     hoverRef.current = hoverId;
     labelTopRef.current = labelTop;
-  }, [onSelect, onFail, near, focus, selectedId, hoverId, labelTop]);
+    onPanPickRef.current = onPanPick;
+  }, [onSelect, onFail, near, focus, selectedId, hoverId, labelTop, onPanPick]);
 
   /** 지금 보기 상태대로 지도를 맞춘다. 사용자가 움직인 뒤(user)에는 그대로 둔다 */
   const applyView = () => {
@@ -286,6 +290,8 @@ export default function StoreMapKakao({ stores, selectedId, onSelect, me, near, 
       for (const c of clustersRef.current) c.ov.setMap(null);
       clustersRef.current = [];
       meRef.current?.ov.setMap(null);
+      for (const ov of panPinsRef.current) ov.setMap(null);
+      panPinsRef.current = [];
       mapRef.current = null;
       apiRef.current = null;
     };
@@ -315,6 +321,25 @@ export default function StoreMapKakao({ stores, selectedId, onSelect, me, near, 
     recluster();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [idsKey, readyTick]);
+
+  // 옮긴 동네 핀: 매장 id 집합이 바뀔 때만 다시 그린다. 지금 범위 핀 아래에 두고 보기 상태는 건드리지 않는다.
+  const panKey = (panStores ?? [])
+    .filter((s) => s.lat !== null && s.lng !== null)
+    .map((s) => s.id)
+    .join(",");
+  useEffect(() => {
+    const k = kRef.current;
+    const map = mapRef.current;
+    for (const ov of panPinsRef.current) ov.setMap(null);
+    panPinsRef.current = [];
+    if (!k || !map) return;
+    for (const s of panStores ?? []) {
+      if (s.lat === null || s.lng === null) continue;
+      const el = panPinButton(displayName(s.name), s.id, () => onPanPickRef.current?.(s.id));
+      panPinsRef.current.push(new k.maps.CustomOverlay({ position: new k.maps.LatLng(s.lat, s.lng), content: el, xAnchor: 0.5, yAnchor: 0.5, zIndex: 0, clickable: true, map }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [panKey, readyTick]);
 
   // 기준점이나 내 주변 모드가 바뀌면 첫 화면 규칙으로 다시 맞춘다.
   const focusKey = focus ? `${focus.lat},${focus.lng}` : "";

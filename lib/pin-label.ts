@@ -147,6 +147,18 @@ export function pinButton(name: string, id: string, onClick: (el: HTMLButtonElem
   return b;
 }
 
+/**
+ * 옮긴 동네 핀 버튼(.smpin.smpin--far). 지금 범위 핀과 같은 버튼에 옅은 작은 점을 쓴다. 이름 글자는 켜지 않는다(title로만 보인다).
+ * 누르면 그 매장 주소의 동으로 홈 범위를 바꾸고 영수증을 연다(받는 쪽이 한다).
+ */
+export function panPinButton(name: string, id: string, onClick: () => void): HTMLButtonElement {
+  const b = pinButton(name, id, onClick);
+  b.classList.add("smpin--far");
+  b.removeAttribute("aria-pressed");
+  b.setAttribute("aria-label", `${name}, 이 동네로 옮겨 영수증 열기`);
+  return b;
+}
+
 /** 선택, 강조 표시를 핀 버튼에 단다 */
 export function markPin(el: HTMLElement, selected: boolean, hover: boolean): void {
   el.classList.toggle("is-selected", selected);

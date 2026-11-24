@@ -5,7 +5,7 @@ import L from "leaflet";
 import { useEffect, useRef } from "react";
 import { TILE_ATTRIBUTION, TILE_GRAYSCALE, TILE_MAX_ZOOM, TILE_URL } from "@/lib/map-tiles";
 import { widthKm } from "@/lib/area-search";
-import { type PinRank, clusterButton, clusterPins, markPin, pinButton, placePinTags, topRanked } from "@/lib/pin-label";
+import { type PinRank, clusterButton, clusterPins, markPin, panPinButton, pinButton, placePinTags, topRanked } from "@/lib/pin-label";
 import { displayName } from "@/lib/store-view";
 import type { MapAdapterProps } from "./StoreMap";
 
@@ -37,12 +37,15 @@ function meIcon(): L.DivIcon {
   return L.divIcon({ className: "smme", html: '<span class="smme__dot"></span>', iconSize: [28, 28], iconAnchor: [14, 14] });
 }
 
-export default function StoreMapLeaflet({ stores, selectedId, onSelect, me, near, focus, hoverId, labelTop, apiRef, onUserView }: MapAdapterProps) {
+export default function StoreMapLeaflet({ stores, selectedId, onSelect, me, near, focus, hoverId, labelTop, apiRef, onUserView, panStores, onPanPick }: MapAdapterProps) {
   const boxRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const pinsRef = useRef<Map<string, Pin>>(new Map());
   const clustersRef = useRef<{ m: L.Marker; el: HTMLButtonElement; ids: string[] }[]>([]);
   const meRef = useRef<L.Marker | null>(null);
+  /** 옮긴 동네 핀. pinsRef와 따로 둔다(보기 맞춤, 묶음, 이름 글자에 넣지 않는다) */
+  const panPinsRef = useRef<L.Marker[]>([]);
+  const onPanPickRef = useRef(onPanPick);
   const labelTopRef = useRef(labelTop);
   const onSelectRef = useRef(onSelect);
   const nearRef = useRef(near);
@@ -61,7 +64,8 @@ export default function StoreMapLeaflet({ stores, selectedId, onSelect, me, near
     selectedRef.current = selectedId;
     hoverRef.current = hoverId;
     labelTopRef.current = labelTop;
-  }, [onSelect, near, focus, selectedId, hoverId, labelTop]);
+    onPanPickRef.current = onPanPick;
+  }, [onSelect, near, focus, selectedId, hoverId, labelTop, onPanPick]);
 
   /** 지금 보기 상태대로 지도를 맞춘다. 사용자가 움직인 뒤(user)에는 그대로 둔다. 숨겨진 지도(크기 0)에서는 보일 때로 미룬다 */
   const applyView = () => {
@@ -232,6 +236,7 @@ export default function StoreMapLeaflet({ stores, selectedId, onSelect, me, near
       pins.clear();
       clustersRef.current = [];
       meRef.current = null;
+      panPinsRef.current = [];
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -262,6 +267,26 @@ export default function StoreMapLeaflet({ stores, selectedId, onSelect, me, near
     // idsKey가 같으면 같은 핀 집합이다.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [idsKey]);
+
+  // 옮긴 동네 핀: 매장 id 집합이 바뀔 때만 다시 그린다. 지금 범위 핀 아래에 두고 보기 상태는 건드리지 않는다.
+  const panKey = (panStores ?? [])
+    .filter((s) => s.lat !== null && s.lng !== null)
+    .map((s) => s.id)
+    .join(",");
+  useEffect(() => {
+    const map = mapRef.current;
+    for (const m of panPinsRef.current) m.remove();
+    panPinsRef.current = [];
+    if (!map) return;
+    for (const s of panStores ?? []) {
+      if (s.lat === null || s.lng === null) continue;
+      const el = panPinButton(displayName(s.name), s.id, () => onPanPickRef.current?.(s.id));
+      L.DomEvent.disableClickPropagation(el);
+      const m = L.marker([s.lat, s.lng], { icon: L.divIcon({ className: "smpin-wrap", html: el, iconSize: [24, 24], iconAnchor: [12, 12] }), interactive: false, keyboard: false, zIndexOffset: -1000 }).addTo(map);
+      panPinsRef.current.push(m);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [panKey]);
 
   // 기준점이나 내 주변 모드가 바뀌면 첫 화면 규칙으로 다시 맞춘다.
   const focusKey = focus ? `${focus.lat},${focus.lng}` : "";

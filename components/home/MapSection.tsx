@@ -3,7 +3,7 @@
 import "@/app/mapsection.css";
 import { type Ref, useCallback, useEffect, useId, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { StoreMap } from "@/components/StoreMap";
-import { AREA_SEARCH_MAX_KM, type MapView } from "@/lib/area-search";
+import { AREA_SEARCH_MAX_KM, type MapView, type PanStore } from "@/lib/area-search";
 import { distanceM } from "@/lib/store-view";
 import { holdTop } from "@/lib/top-fold";
 import type { Store } from "@/lib/stores";
@@ -41,6 +41,15 @@ export type MapSectionProps = {
    * 누르면 그때의 지도 범위를 넘긴다. 이동했으면 null, 못 갔으면 지도 위에 띄울 짧은 안내를 돌려준다
    */
   onAreaSearch?: (v: MapView) => Promise<string | null>;
+  /**
+   * 있으면 사용자 제스처 이동이 끝날 때마다 그 범위를, 자동 맞춤(첫 화면, 상권 전체 보기)으로 돌아가면 null을 넘긴다.
+   * 받는 쪽이 옮긴 동네 핀을 조회한다(lib/area-search.ts)
+   */
+  onPanView?: (v: MapView | null) => void;
+  /** 옮긴 동네 핀(지도에만 옅게, 목록에는 넣지 않는다) */
+  panStores?: PanStore[];
+  /** 옮긴 동네 핀을 누르면 그 매장 id로 부른다 */
+  onPanPick?: (id: string) => void;
   ref?: Ref<MapSectionHandle>;
 };
 
@@ -75,9 +84,10 @@ function stuckHeight(): number {
 /**
  * 지도와 전체 매장. 768px 이상은 왼쪽 목록 40%, 오른쪽 지도 60%.
  * 768px 미만은 섹션이 접힌 상단 바 아래 화면 높이를 채우고 위 70%가 지도, 아래 30%가 목록이다(목록만 따로 스크롤한다. app/mapsection.css).
- * 지도 이동, 확대, 묶음 풀기, 정렬은 서버를 부르지 않는다(정렬 주소 반영은 onSort를 받은 쪽이 history로 한다).
+ * 확대, 묶음 풀기, 정렬은 서버를 부르지 않는다(정렬 주소 반영은 onSort를 받은 쪽이 history로 한다).
+ * 지도 이동은 onPanView를 받은 쪽이 조건에 맞을 때만 옮긴 동네 핀을 조회한다(lib/area-search.ts).
  */
-export function MapSection({ stores, origin, originLabel, focus, me, near, locateState, onLocate, selectedId, onOpen, sort, onSort, onAreaSearch, ref }: MapSectionProps) {
+export function MapSection({ stores, origin, originLabel, focus, me, near, locateState, onLocate, selectedId, onOpen, sort, onSort, onAreaSearch, onPanView, panStores, onPanPick, ref }: MapSectionProps) {
   const headId = useId();
   const sectionRef = useRef<HTMLElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
@@ -100,14 +110,18 @@ export function MapSection({ stores, origin, originLabel, focus, me, near, locat
     setAreaNote(null);
   }
   // 제스처로 시작된 이동만 버튼을 새로 띄운다. 제스처가 아닌 이동(목록 선택의 panTo)은 이미 떠 있는 버튼의 범위만 고친다.
-  const onUserView = useCallback((v: MapView | null, byGesture: boolean) => {
-    if (v === null || byGesture) {
-      setView(v);
-      setAreaNote(null);
-      return;
-    }
-    setView((prev) => (prev ? v : prev));
-  }, []);
+  const onUserView = useCallback(
+    (v: MapView | null, byGesture: boolean) => {
+      if (v === null || byGesture) {
+        setView(v);
+        setAreaNote(null);
+        onPanView?.(v);
+        return;
+      }
+      setView((prev) => (prev ? v : prev));
+    },
+    [onPanView],
+  );
   const searchHere = async () => {
     if (!onAreaSearch || !view || searching) return;
     setSearching(true);
@@ -254,9 +268,11 @@ export function MapSection({ stores, origin, originLabel, focus, me, near, locat
               focus={focus}
               hoverId={hoverId}
               labelTop={LABEL_TOP}
-              onUserView={onAreaSearch ? onUserView : undefined}
+              onUserView={onAreaSearch || onPanView ? onUserView : undefined}
               overlay={hereOverlay}
               touchAxis
+              panStores={panStores}
+              onPanPick={onPanPick}
             />
           </div>
           <div className="mapsec__side">

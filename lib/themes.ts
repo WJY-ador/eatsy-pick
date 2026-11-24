@@ -34,7 +34,7 @@ function isY2030(customer1: string | null | undefined): boolean {
   return typeof customer1 === "string" && /^(20|30)대/.test(customer1);
 }
 
-export function matchTheme(store: Store, theme: ThemeId): boolean {
+export function matchTheme(store: Pick<Store, "ccgRank" | "local" | "hoesik" | "customer1">, theme: ThemeId): boolean {
   switch (theme) {
     case "top1":
       return typeof store.ccgRank === "number" && Number.isFinite(store.ccgRank) && store.ccgRank <= 1;
