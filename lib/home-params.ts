@@ -108,6 +108,24 @@ export function splitRegionFood(input: string): { region: string; food: string; 
   return isRegionTerm(region) ? { region, food: cat as string, foodTerm: t } : null;
 }
 
+/** 맨 낱말 꼴: 공백 없는 한글 2~10자(다산, 망원). 서버가 카카오로 지역인지 본다(lib/word-region.ts) */
+export const BARE_WORD = /^[가-힣]{2,10}$/;
+
+/**
+ * 맛집 둘러보기 검색의 맨 낱말 부분. 맨 낱말(망원)이면 그 낱말, 맨 낱말 + 음식 표현 하나(망원 고기)면 낱말과 업종.
+ * 그 밖은 null. 지역 꼴과 음식만인 검색어는 parseHome이 먼저 푼다.
+ */
+export function bareWordFood(input: string): { word: string; food: string | null } | null {
+  const tokens = input.trim().split(/\s+/).filter(Boolean);
+  if (tokens.length === 1) return BARE_WORD.test(tokens[0]) ? { word: tokens[0], food: null } : null;
+  if (tokens.length !== 2) return null;
+  const cats = tokens.map((t) => foodCategory(t));
+  const i = cats.findIndex(Boolean);
+  if (i < 0 || cats[1 - i]) return null;
+  const word = tokens[1 - i];
+  return BARE_WORD.test(word) ? { word, food: cats[i] } : null;
+}
+
 function areaScope(slug: string): HomeScope {
   const a = areaBySlug(slug) ?? areaBySlug(DEFAULT_SLUG)!;
   return { kind: "area", slug: a.slug, name: a.name };

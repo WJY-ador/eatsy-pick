@@ -9,10 +9,9 @@ import type { PresetPoint } from "@/lib/geocode";
 import type { HomeData, PlaceHit, SearchState } from "@/lib/home-data";
 import { type HomeQuery, homeHref, parseHome, scopeInput, scopeName } from "@/lib/home-params";
 import { SITE_NAME, shareImages, shareTwitterImages } from "@/lib/site";
-import { regionForWord } from "@/lib/place";
 import { type AreaDataset, loadAreaWithPlace, presetCenter, searchStores } from "@/lib/stores";
 import { THEMES } from "@/lib/themes";
-import { regionLoc, wordPlaces } from "@/lib/word-region";
+import { lookupName } from "@/lib/word-region";
 
 // 매장 검색 2건(5초)과 맨 낱말의 지역 후보 2건(3초)을 함께, 0곳이면 장소 검색 1건(3초)을 더하고(약 8초),
 // 그다음 장소 검색 2건(각 3초) + 상권 조회 3건(5초). 타임아웃 기준 최악 약 19초.
@@ -40,26 +39,9 @@ async function load(h: HomeQuery): Promise<Loaded> {
   }
 }
 
-type NameLookup = { search: SearchState; region: string | null };
-
-/**
- * 가게 이름 검색. free(주소에 지역 범위가 없음)면 맨 낱말의 지역 풀이를 함께 해서 region에 지역 조회용 loc를 준다.
- * 지역 풀이 순서: 카카오 지역 후보(동, 읍, 면, 시, 군, 구, 역) 중 낱말과 이름이 맞는 것, 여럿이면 이름 검색 결과가 몰린 시군구.
- * 후보가 없고 이름 검색이 0곳이면 명소, 공원 이름(낙산공원)을 본다(regionForWord).
- * 메타데이터와 본문이 같은 요청에서 한 번만 부르게 묶는다.
- */
-const nameLookup = cache(async (q: string, free: boolean): Promise<NameLookup> => {
-  const [found, places] = await Promise.all([
-    searchStores(q).then(
-      (r): SearchState => ({ status: r.stores.length ? "ok" : "empty", query: r.query, stores: r.stores }),
-      (): SearchState => ({ status: "error", query: q, stores: [] }),
-    ),
-    free ? wordPlaces(q) : Promise.resolve(null),
-  ]);
-  if (!free) return { search: found, region: null };
-  const region = regionLoc(places, q, found.stores) ?? (found.status === "empty" ? await regionForWord(q) : null);
-  return { search: found, region };
-});
+// 가게 이름 검색과 맨 낱말 지역 풀이(lookupName, 상권 분석의 맨 낱말 검색도 같이 쓴다).
+// 메타데이터와 본문이 같은 요청에서 한 번만 부르게 묶는다.
+const nameLookup = cache(lookupName);
 
 /**
  * 주소의 해석을 확정한다. 가게 이름 검색(영수증 링크 아님)은 이름 검색을 하고, 범위가 없는 맨 낱말이 지역으로 풀리면

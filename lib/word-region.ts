@@ -1,13 +1,15 @@
 // 홈 통합 검색의 맨 낱말(다산, 망원, 강릉, 선릉)을 지역으로 푼다. 서버에서만 쓴다(카카오 키).
 // 가게 이름 검색 결과와 상관없이 지역 풀이를 먼저 보고, 풀리면 홈 범위를 그 지역으로 바꾼다(app/page.tsx).
 
+import type { SearchState } from "./home-data";
+import { BARE_WORD } from "./home-params";
 import { inSido } from "./my-areas";
-import { type RegionPlace, searchRegionPlaces } from "./place";
-import type { Store } from "./stores";
+import { type RegionPlace, regionForWord, searchRegionPlaces } from "./place";
+import { type Store, searchStores } from "./stores";
 
 /** 맨 낱말 꼴: 공백 없는 한글 2~10자. 음식, 프리셋, 동네 꼴, 역 꼴 판정은 parseHome이 먼저 한다 */
 export function isBareWord(word: string): boolean {
-  return /^[가-힣]{2,10}$/.test(word.trim());
+  return BARE_WORD.test(word.trim());
 }
 
 /** 지역 이름의 마지막 단위(망원동 → 망원, 강릉시 → 강릉, 성수동2가 → 성수, 역삼1동 → 역삼) */
@@ -65,4 +67,25 @@ export async function wordPlaces(word: string): Promise<RegionPlace[] | null> {
 export function regionLoc(places: RegionPlace[] | null, word: string, stores: Store[]): string | null {
   const p = places ? pickRegion(places, word.trim(), stores) : null;
   return p ? locOf(p) : null;
+}
+
+export type NameLookup = { search: SearchState; region: string | null };
+
+/**
+ * 가게 이름 검색. free(주소에 지역 범위가 없음)면 맨 낱말의 지역 풀이를 함께 해서 region에 지역 조회용 loc를 준다.
+ * 지역 풀이 순서: 카카오 지역 후보(동, 읍, 면, 시, 군, 구, 역) 중 낱말과 이름이 맞는 것, 여럿이면 이름 검색 결과가 몰린 시군구.
+ * 후보가 없고 이름 검색이 0곳이면 명소, 공원 이름(낙산공원)을 본다(regionForWord).
+ * 홈(app/page.tsx)과 상권 분석의 맨 낱말 검색(app/analysis/page.tsx)이 같이 쓴다.
+ */
+export async function lookupName(q: string, free: boolean): Promise<NameLookup> {
+  const [found, places] = await Promise.all([
+    searchStores(q).then(
+      (r): SearchState => ({ status: r.stores.length ? "ok" : "empty", query: r.query, stores: r.stores }),
+      (): SearchState => ({ status: "error", query: q, stores: [] }),
+    ),
+    free ? wordPlaces(q) : Promise.resolve(null),
+  ]);
+  if (!free) return { search: found, region: null };
+  const region = regionLoc(places, q, found.stores) ?? (found.status === "empty" ? await regionForWord(q) : null);
+  return { search: found, region };
 }
