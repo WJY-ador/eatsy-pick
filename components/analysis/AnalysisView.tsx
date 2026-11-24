@@ -500,7 +500,7 @@ export function AnalysisView({ dataset, scope, fellBack }: { dataset: AreaDatase
                 </h2>
                 {matchCount("map")}
                 <div className={s.mapBox} data-testid="map" data-map-count={shown.length} data-on-map={onMap}>
-                  <StoreMap stores={shown} selectedId={selected} onSelect={setSelectedId} me={null} height={320} touchLock />
+                  <StoreMap stores={shown} selectedId={selected} onSelect={setSelectedId} me={null} height={320} touchAxis />
                 </div>
               </section>
 

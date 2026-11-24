@@ -16,12 +16,10 @@
 .storemap__fit:focus-visible, .storemap__btn:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; position: relative; z-index: 1; }
 .storemap__zoom .storemap__btn:focus-visible { outline-offset: -3px; }
 
-/* Touch lock (StoreMap touchLock, under 768px on touch devices only), like the cooperative gestures of Google Maps on the web:
-   one finger scrolls the page and shows a short two-finger hint over the map; two fingers move and zoom the map.
-   Kakao sets touch-action: none on an inner layer, so it is overridden here. StoreMap stops one-finger events from reaching either library. */
-.storemap__wrap[data-touch-lock] .storemap__frame, .storemap__wrap[data-touch-lock] .storemap__frame * { touch-action: pan-x pan-y !important; }
-.storemap__hint { position: absolute; inset: 0; z-index: 400; display: grid; place-items: center; padding: var(--space-md); border-radius: var(--radius-panel); background: color-mix(in oklab, var(--color-ink) 72%, transparent); color: var(--color-panel); font: 600 var(--text-md)/1.4 var(--font-body); text-align: center; pointer-events: none; opacity: 0; transition: opacity var(--dur-micro) var(--ease-out); }
-.storemap__hint[data-show] { opacity: 1; }
+/* Touch axis (StoreMap touchAxis, under 768px on touch devices only): one finger is split by its first movement.
+   Sideways moves the map; up or down scrolls the page, so pan-y here lets the browser scroll vertically.
+   Kakao and Leaflet set touch-action: none on inner layers, so it is overridden. StoreMap holds one-finger events back from both libraries until the direction is known. */
+.storemap__wrap[data-touch-axis] .storemap__frame, .storemap__wrap[data-touch-axis] .storemap__frame * { touch-action: pan-y !important; }
 
 /* Locate: idle is an ink outline, on fills blue, locating pulses the core, denied mutes and strikes through */
 .storemap__icon { display: block; }
@@ -83,5 +81,5 @@
 
 @media (prefers-reduced-motion: reduce) {
   .storemap__locate[data-state="locating"] .storemap__icon-core { animation: none; opacity: 0.5; }
-  .storemap__fit, .storemap__btn, .storemap__hint, .smpin__dot, .smclu__n { transition: none; }
+  .storemap__fit, .storemap__btn, .smpin__dot, .smclu__n { transition: none; }
 }
