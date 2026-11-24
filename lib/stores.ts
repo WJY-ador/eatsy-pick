@@ -214,17 +214,24 @@ async function runQueries(queries: SearchParams[], fn: SearchFn) {
 /**
  * 상권 조회. area(프리셋 slug)면 그 프리셋의 동 앞 3개를 location만으로 조회하고 허용 시군구로 거른다.
  * category(업종)를 주면 같은 location × 그 업종 1개로 조회한다(음식 검색).
+ * name(가게 이름)을 주면 같은 location × 그 이름(merNm)으로 조회한다(상권 분석의 범위 안 이름 검색).
+ * 지역 조회를 받아 이름으로 거르지 않는 까닭: 지역 조회는 범위마다 상위 100곳이라 이름이 맞는 매장이 많이 빠진다
+ * (2026-11-24 실측, 강남역 투썸 22곳 중 8곳, 메가 48곳 중 11곳만 남았다). 호출 수는 지역 조회와 같다.
  * loc(자유 입력)이면 주소 꼴은 그 값 1건, 역이나 장소 이름은 장소 검색으로 찾은 주소 범위(최대 3건).
  * 0건이면 빈 dataset, 호출이 전부 실패하면 throw. 응답은 Next fetch 캐시가 21600초 동안 재사용한다.
  * place는 장소 검색으로 찾은 기준점(없으면 null).
  */
 export async function loadAreaWithPlace(
-  input: { area?: string; loc?: string; category?: string },
+  input: { area?: string; loc?: string; category?: string; name?: string },
   fn: SearchFn = search,
 ): Promise<{ dataset: AreaDataset; place: PlaceHit | null }> {
   const plan = await planOf(input);
-  // category가 있으면 같은 location마다 그 업종 하나만 조회한다(호출 수는 그대로 3건 이하).
-  const params: SearchParams[] = plan.queries.map((location) => (input.category ? { location, merTpbuzNm: input.category } : { location }));
+  // category나 name이 있으면 같은 location마다 그 조건을 붙여 조회한다(호출 수는 그대로 3건 이하).
+  const params: SearchParams[] = plan.queries.map((location) => ({
+    location,
+    ...(input.category ? { merTpbuzNm: input.category } : {}),
+    ...(input.name ? { merNm: input.name } : {}),
+  }));
   const settled = await Promise.allSettled(params.map((p) => fn(p)));
   const ok = settled.filter((s): s is PromiseFulfilledResult<EatplItem[]> => s.status === "fulfilled");
   const failed = settled.length - ok.length;
@@ -249,7 +256,7 @@ export async function loadAreaWithPlace(
 }
 
 /** 상권 조회(기준점 없이 dataset만). 상권 분석과 공유 카드가 쓴다 */
-export async function loadArea(input: { area?: string; loc?: string; category?: string }, fn: SearchFn = search): Promise<AreaDataset> {
+export async function loadArea(input: { area?: string; loc?: string; category?: string; name?: string }, fn: SearchFn = search): Promise<AreaDataset> {
   return (await loadAreaWithPlace(input, fn)).dataset;
 }
 

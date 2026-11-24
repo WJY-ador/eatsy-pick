@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { ImageResponse } from "next/og";
 import type { NextRequest } from "next/server";
-import { PAGE_INTRO, foodLabel, loadInput, pageTitle, parseScope, scopeName } from "@/components/analysis/scope";
+import { PAGE_INTRO, foodLabel, loadInput, pageTitle, parseScope, scopeFilters, scopeName } from "@/components/analysis/scope";
 import { type Analysis, type Ratio, analyze, c1Label, parseFilters, ratioPercent, splitPeak } from "@/lib/analytics";
 import { customerLabel } from "@/lib/labels";
 import { OG_COLORS as C } from "@/lib/og-theme";
@@ -142,7 +142,7 @@ export async function GET(request: NextRequest) {
     const { scope } = parseScope(raw);
     const dataset = await loadArea(loadInput(scope));
     if (dataset.stores.length > 0) {
-      const a = analyze(dataset.stores, parseFilters(raw));
+      const a = analyze(dataset.stores, scopeFilters(scope, parseFilters(raw)));
       const place = dataset.title || scopeName(scope);
       return await render(<AnalysisCard title={pageTitle(place, scope)} scopeLabel={dataset.scopeLabel} food={foodLabel(scope)} a={a} />);
     }

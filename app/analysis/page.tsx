@@ -1,13 +1,15 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { AnalysisView } from "@/components/analysis/AnalysisView";
-import { AreaSwitch } from "@/components/analysis/AreaSwitch";
 import { type Scope, PAGE_INTRO, analysisPath, loadInput, pageTitle, parseScope, scopeName } from "@/components/analysis/scope";
 import s from "@/components/analysis/analysis.module.css";
 import { c1Label, parseFilters, splitPeak } from "@/lib/analytics";
+import { BARE_WORD } from "@/lib/home-params";
 import { customerLabel } from "@/lib/labels";
 import { SITE_NAME, shareImages, shareTwitterImages } from "@/lib/site";
 import { loadArea } from "@/lib/stores";
+import { lookupName } from "@/lib/word-region";
 
 export const maxDuration = 30;
 
@@ -28,6 +30,7 @@ export async function generateMetadata({ searchParams }: PageProps<"/analysis">)
   if (f.c1) parts.push(`1위 고객층 ${c1Label(f.c1)}`);
   if (f.local) parts.push("동네맛집");
   if (f.hoesik) parts.push("회식 적합");
+  if (scope.store) parts.unshift(`이름 ${scope.store}`);
   const applied = parts.length > 0 ? ` ${parts.join(", ")} 조건을 적용했습니다.` : "";
   const description = `${name}. ${PAGE_INTRO} 업종별 매장 수, 대표 피크 요일과 시간대, 1위 고객층의 연령대와 성별, 동네맛집과 회식 적합 비율을 보여 줍니다.${applied}`;
   // 공유 미리보기(og, twitter) 문구. 제목은 화면 제목과 같고, 설명은 소개 문장에 원본 값으로 보는 항목과 적용 조건을 붙인다.
@@ -57,12 +60,22 @@ async function Loaded({ scope, fellBack }: { scope: Scope; fellBack: boolean }) 
   return <AnalysisView dataset={dataset} scope={scope} fellBack={fellBack} />;
 }
 
+/**
+ * 가게 이름 조건(q)이 맨 낱말(망원, 투썸)이면 홈과 같은 지명 풀이(lookupName)를 먼저 본다. 지역이면 그 지역의 /analysis로
+ * redirect하고(음식 조건 유지), 아니면 지금 범위 안의 이름 검색으로 그린다(loadArea의 name).
+ * 공유 주소를 다시 열어도 같은 풀이를 거친다(조회는 Next fetch 캐시가 재사용한다).
+ */
 async function AnalysisData({ searchParams }: { searchParams: PageProps<"/analysis">["searchParams"] }) {
   const raw = await searchParams;
   const { scope, fellBack } = parseScope(raw);
+  if (scope.store && BARE_WORD.test(scope.store)) {
+    const { region } = await lookupName(scope.store, true);
+    // replace(기본값): 검색 이동이 넣은 q 주소의 기록 자리를 도착 주소로 바꾼다. 같은 화면(/analysis) 안의 이동이다.
+    // push로 하면 q 주소가 기록에 남아 뒤로 가기가 다시 같은 곳으로 보내진다(2026-11-24 실측).
+    if (region) redirect(analysisPath({ kind: "loc", loc: region, food: scope.food }, null));
+  }
   return (
     <div className={s.inner}>
-      <AreaSwitch scope={scope} />
       <Suspense key={analysisPath(scope, null)} fallback={<Skeleton />}>
         <Loaded scope={scope} fellBack={fellBack} />
       </Suspense>

@@ -34,7 +34,7 @@ import { PeakTable } from "./Charts";
 import { useHelp } from "./Help";
 import { PyramidChart } from "./Pyramid";
 import { Treemap } from "./Treemap";
-import { type Scope, PAGE_INTRO, analysisPath, foodLabel, pageTitle, receiptHref } from "./scope";
+import { type Scope, PAGE_INTRO, analysisPath, foodLabel, pageTitle, receiptHref, scopeFilters } from "./scope";
 import { ShareButton } from "./ShareButton";
 import s from "./analysis.module.css";
 
@@ -241,8 +241,8 @@ export function AnalysisView({ dataset, scope, fellBack }: { dataset: AreaDatase
   const filters = useMemo(() => {
     const raw: Record<string, string[]> = {};
     for (const k of new Set(sp.keys())) raw[k] = sp.getAll(k);
-    return parseFilters(raw);
-  }, [sp]);
+    return scopeFilters(scope, parseFilters(raw));
+  }, [sp, scope]);
   const a = useMemo(() => analyze(dataset.stores, filters), [dataset.stores, filters]);
   const applied = a.filters;
   const path = analysisPath(scope, applied);
@@ -279,6 +279,8 @@ export function AnalysisView({ dataset, scope, fellBack }: { dataset: AreaDatase
   };
   const empty = dataset.stores.length === 0;
   const food = foodLabel(scope);
+  // 가게 이름 조건을 풀면 같은 범위의 검색 전 화면(필터 없음, 프랜차이즈 제외 기본값)으로 간다.
+  const storeOff = scope.store ? analysisPath({ ...scope, store: null }, null) : null;
   const receiptStore = receiptId ? (dataset.stores.find((st) => st.id === receiptId) ?? null) : null;
   const openReceipt = (st: Store, el: HTMLElement) => {
     opener.current = el;
@@ -339,6 +341,12 @@ export function AnalysisView({ dataset, scope, fellBack }: { dataset: AreaDatase
               <dd data-testid="scope-food">{food} 업종으로 조회</dd>
             </div>
           ) : null}
+          {scope.store ? (
+            <div className={s.fact}>
+              <dt>가게 이름</dt>
+              <dd data-testid="scope-store">{scope.store}, 프랜차이즈 포함</dd>
+            </div>
+          ) : null}
           <div className={s.fact}>
             <dt>분석 매장</dt>
             <dd data-testid="filtered">{a.filtered.length}곳</dd>
@@ -362,17 +370,19 @@ export function AnalysisView({ dataset, scope, fellBack }: { dataset: AreaDatase
         {!empty ? (
           <>
             <div className={s.controls}>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={applied.fr}
-                className={`${s.btn} ${applied.fr ? s.switchOn : ""}`}
-                onClick={() => setFilters({ ...applied, fr: !applied.fr })}
-              >
-                <span className={s.switchTrack} aria-hidden="true" />
-                프랜차이즈 제외
-                <span className={s.num}>({a.franchiseCount}곳)</span>
-              </button>
+              {scope.store ? null : (
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={applied.fr}
+                  className={`${s.btn} ${applied.fr ? s.switchOn : ""}`}
+                  onClick={() => setFilters({ ...applied, fr: !applied.fr })}
+                >
+                  <span className={s.switchTrack} aria-hidden="true" />
+                  프랜차이즈 제외
+                  <span className={s.num}>({a.franchiseCount}곳)</span>
+                </button>
+              )}
               <button type="button" className={s.btn} onClick={clearAll} disabled={!hasSelection(applied)}>
                 필터 모두 해제
               </button>
@@ -381,8 +391,13 @@ export function AnalysisView({ dataset, scope, fellBack }: { dataset: AreaDatase
                 지도 보기
               </button>
             </div>
-            {chips.length > 0 ? (
+            {chips.length > 0 || storeOff ? (
               <div className={s.chips} aria-label="적용한 필터">
+                {storeOff ? (
+                  <Link className={s.chip} href={storeOff} prefetch={false} aria-label={`이름 ${scope.store} 필터 해제`} data-testid="store-chip">
+                    이름 {scope.store} 해제
+                  </Link>
+                ) : null}
                 {chips.map((c) => (
                   <button
                     key={c.key}
@@ -401,11 +416,24 @@ export function AnalysisView({ dataset, scope, fellBack }: { dataset: AreaDatase
       </section>
 
       {empty ? (
-        <section className={s.panel}>
+        <section className={s.panel} data-testid="store-empty">
           <h2 className={s.h2}>조회된 매장이 없습니다</h2>
-          <p className={s.empty}>
-            {dataset.scopeLabel}에서 조회된 매장이 없습니다. 다른 동네나 상권을 골라 주세요.
-          </p>
+          {storeOff ? (
+            <>
+              <p className={s.empty}>
+                {dataset.scopeLabel}에서 {scope.store} 이름이 들어간 가게를 찾지 못했습니다.
+              </p>
+              <div className={s.controls}>
+                <Link className={s.btn} href={storeOff} prefetch={false}>
+                  이름 조건 해제
+                </Link>
+              </div>
+            </>
+          ) : (
+            <p className={s.empty}>
+              {dataset.scopeLabel}에서 조회된 매장이 없습니다. 상단 검색창에서 다른 동네나 역을 찾아 주세요.
+            </p>
+          )}
         </section>
       ) : (
         <>
