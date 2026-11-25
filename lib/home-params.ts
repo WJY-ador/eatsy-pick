@@ -1,7 +1,8 @@
 // 홈 URL 계약. 서버 page와 클라이언트가 같이 쓴다. Next 전용 API와 proj4를 import하지 않는다.
 //   area=<slug> | loc=<동네, 구, 역, 프리셋 이름>(+ near=1) | q=<통합 검색어>&id=<Store.id> | fr=0
-//   loc + q(id 없음)는 지역 홈 + 그 이름이 들어간 가게다(맨 낱말 검색이 지역으로 풀리면 서버가 이 꼴로 보낸다).
-//   범위 없는 q는 가게 이름 검색만이다.
+//   area나 loc + q(id 없음)는 지역 홈 + 그 범위 안 이름 검색이다(머리말 검색이 지금 지역을 함께 보낸다, homeSearchHref).
+//   맨 낱말이 지역으로 풀리면 서버가 loc + q로 바꾸고, 그때 q는 지역 홈 아래 이름 보조 섹션이다.
+//   범위 없는 q는 전국 가게 이름 검색만이다.
 //   | t=<테마 top1|local|hoesik, 칩에서 뺀 y2030은 옛 링크용으로 계속 읽는다> | s=rank
 //   옛 링크의 occ, n, d(거리 구간)는 읽지 않는다.
 
@@ -181,9 +182,8 @@ export function parseHome(raw: Raw): HomeQuery {
       q = null;
     }
   }
-  // 옛 공유 링크(area=gangnam&q=가게 이름, 예전 canonical이 기본 상권을 붙였다)는 이름 검색으로 읽는다.
-  // 기본 상권 피드를 이름 검색 아래에 다시 붙이지 않게 한다. 영수증 링크(id)와 loc는 그대로 둔다.
-  if (q && !id && !food && first(raw.area) === DEFAULT_SLUG && !first(raw.loc)) scope = null;
+  // area=gangnam&q=가게 이름은 강남역 범위 안 이름 검색이다(머리말 검색이 강남역 홈에서 보내는 꼴과 같다).
+  // 예전 canonical이 기본 상권을 붙인 옛 공유 링크도 같게 읽는다.
   const isDefault = scope === null && !food;
   return {
     scope: scope ?? areaScope(DEFAULT_SLUG),
@@ -228,6 +228,22 @@ export function homeHref(
   if (o.theme && o.theme !== "all") e.push(["t", o.theme]);
   if (o.sort === "rank") e.push(["s", "rank"]);
   return e.length ? `/?${new URLSearchParams(e).toString()}` : "/";
+}
+
+/**
+ * 홈 머리말 검색어가 갈 주소. 지역, 음식, 지역 + 음식으로 풀리는 검색어(parseHome이 q를 비운다)와 공백이 든 검색어는
+ * 지금처럼 범위 없이(/?q=) 보낸다. 그 밖의 낱말(메뉴, 가게 이름)은 지금 홈이 지역을 정했으면(scoped) 그 범위(area 또는 loc,
+ * 내 주변이면 near=1)와 프랜차이즈 제외, 테마, 정렬을 함께 보낸다. 영수증(id)은 넘기지 않는다.
+ * 서버는 범위 안 이름 검색을 하고, 낱말이 지역 후보와 맞으면 범위 없는 검색과 같은 지명 풀이를 한다(app/page.tsx).
+ * 공백이 든 검색어(교촌 치킨, 해운대 고기)는 지금처럼 전국 검색으로 보낸다. 전국 검색이 첫 토큰을 location, 나머지를 merNm으로 나눠 한 번 더 조회한다.
+ * current는 지금 홈 주소의 쿼리(?area=gangnam)다.
+ */
+export function homeSearchHref(q: string, current: string): string {
+  const free = homeHref(null, { q });
+  if (/\s/.test(q.trim()) || parseHome({ q }).q === null) return free;
+  const cur = parseHome(Object.fromEntries(new URLSearchParams(current)));
+  if (!cur.scoped) return free;
+  return homeHref(cur.scope, { near: cur.near, q, excludeFranchise: cur.excludeFranchise, theme: cur.theme, sort: cur.sort });
 }
 
 /**

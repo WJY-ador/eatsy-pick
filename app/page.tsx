@@ -8,13 +8,15 @@ import { foodDisplayName } from "@/lib/food";
 import type { PresetPoint } from "@/lib/geocode";
 import type { HomeData, PlaceHit, SearchState } from "@/lib/home-data";
 import { type HomeQuery, homeHref, parseHome, scopeInput, scopeName } from "@/lib/home-params";
+import { regionForWord } from "@/lib/place";
 import { SITE_NAME, shareImages, shareTwitterImages } from "@/lib/site";
-import { type AreaDataset, loadAreaWithPlace, presetCenter, searchStores } from "@/lib/stores";
+import { type AreaDataset, loadArea, loadAreaWithPlace, presetCenter, searchStores } from "@/lib/stores";
 import { THEMES } from "@/lib/themes";
-import { lookupName } from "@/lib/word-region";
+import { isBareWord, lookupName, matchesWord, wordPlaces } from "@/lib/word-region";
 
 // 매장 검색 2건(5초)과 맨 낱말의 지역 후보 2건(3초)을 함께, 0곳이면 장소 검색 1건(3초)을 더하고(약 8초),
 // 그다음 장소 검색 2건(각 3초) + 상권 조회 3건(5초). 타임아웃 기준 최악 약 19초.
+// 범위가 있는 맨 낱말은 그 앞에 지역 후보 확인(카카오 약 3초)이 붙어 최악 약 22초. 지역이 아니면 상권 조회와 범위 안 이름 검색을 함께 부른다(약 14초).
 export const maxDuration = 30;
 
 // 결과를 스트리밍하지 않고 첫 HTML에 넣는다(JS 없이도 목록이 보이고, 단톡방 미리보기가 메타를 읽게).
@@ -44,17 +46,46 @@ async function load(h: HomeQuery): Promise<Loaded> {
 const nameLookup = cache(lookupName);
 
 /**
- * 주소의 해석을 확정한다. 가게 이름 검색(영수증 링크 아님)은 이름 검색을 하고, 범위가 없는 맨 낱말이 지역으로 풀리면
+ * 범위가 있는 검색어가 지역 풀이 대상인가. 맨 낱말이 카카오 지역 후보(동, 읍, 면, 시, 군, 구, 역)와 맞거나(matchesWord),
+ * 맞는 후보가 없을 때 역, 명소, 공원 이름(regionForWord)이면 true. 카카오만 부른다(프록시 0건).
+ * true면 범위 없는 검색과 같은 지명 풀이(lookupName)를 타고, false면 범위 안 이름 검색만 한다(전국 검색 없음).
+ */
+const regionWord = cache(async (q: string): Promise<boolean> => {
+  if (!isBareWord(q)) return false;
+  const places = await wordPlaces(q);
+  if (places?.some((p) => matchesWord(p, q.trim()))) return true;
+  return (await regionForWord(q)) !== null;
+});
+
+/**
+ * 주소의 해석을 확정한다. 가게 이름 검색(영수증 링크 아님)은 이름 검색을 하고, 맨 낱말이 지역으로 풀리면
  * 그 지역을 범위로 한 홈을 그리고, 그 주소(loc + q)를 to에 준다. 화면이 주소를 to로 바꿔 새로고침, 공유, 머리말 링크가 같은 지역을 보게 한다.
  * (redirect는 이 페이지가 스트리밍이라 스크립트 없이는 빈 화면이 된다. 그래서 그 자리에서 그린다.)
+ * 범위 + q는 지역 풀이 대상(regionWord)일 때만 범위 없는 검색과 같은 풀이를 탄다(범위를 버린다). 아니면 named 없이 돌려주고
+ * 본문이 범위 안 이름 검색을 한다(searchIn). 범위가 있는데 지역으로 풀리지 않으면 전국 결과를 버리고 범위 안 검색으로 간다.
  */
 async function resolveHome(parsed: HomeQuery): Promise<{ h: HomeQuery; named: SearchState | null; to: string | null }> {
   if (!parsed.q || parsed.id) return { h: parsed, named: null, to: null };
-  const { search: named, region } = await nameLookup(parsed.q, parsed.isDefault);
-  if (!region) return { h: parsed, named, to: null };
+  if (!parsed.isDefault && !(await regionWord(parsed.q))) return { h: parsed, named: null, to: null };
+  const { search: named, region } = await nameLookup(parsed.q, true);
+  if (!region) return { h: parsed, named: parsed.isDefault ? named : null, to: null };
   const h: HomeQuery = { ...parsed, scope: { kind: "loc", loc: region }, isDefault: false, scoped: true, near: false };
   const to = homeHref(h.scope, { q: h.q, excludeFranchise: h.excludeFranchise, theme: h.theme, sort: h.sort });
   return { h, named, to };
+}
+
+/**
+ * 범위 안 이름 검색. 범위의 동마다 location + merNm(최대 3건, 상권 분석의 이름 조건과 같은 loadArea name). 전국 검색은 부르지 않는다.
+ * 순서는 화면이 거리 기준점(내 위치, 장소, 상권 중심)에서 가까운 순으로 바꾼다.
+ */
+async function searchIn(h: HomeQuery): Promise<SearchState | null> {
+  if (!h.q) return null;
+  try {
+    const d = await loadArea({ ...scopeInput(h.scope), name: h.q });
+    return { status: d.stores.length ? "ok" : "empty", query: h.q, stores: d.stores, scopeTitle: d.title };
+  } catch {
+    return { status: "error", query: h.q, stores: [], scopeTitle: scopeName(h.scope) };
+  }
 }
 
 async function search(h: HomeQuery, dataset: AreaDataset | null): Promise<SearchState | null> {
@@ -62,6 +93,9 @@ async function search(h: HomeQuery, dataset: AreaDataset | null): Promise<Search
   // 상권 분석에서 넘어온 링크(id가 지금 상권 안에 있음)는 매장 검색을 다시 부르지 않는다.
   const inArea = h.id ? dataset?.stores.find((s) => s.id === h.id) : undefined;
   if (inArea) return { status: "ok", query: h.q, stores: [inArea] };
+  // 범위 안 이름 검색에서 영수증을 연 주소(범위 + q + id)는 그 목록을 만든 검색을 다시 한다(전국 검색에는 그 가게가 빠질 수 있다).
+  // 지역으로 풀리는 낱말의 영수증(지역 홈 보조 섹션에서 연 것)은 전국 검색 그대로다.
+  if (!h.isDefault && !(await regionWord(h.q))) return searchIn(h);
   try {
     const r = await searchStores(h.q);
     return { status: r.stores.length ? "ok" : "empty", query: r.query, stores: r.stores };
@@ -124,14 +158,18 @@ export async function generateMetadata({ searchParams }: PageProps<"/">): Promis
 export default async function Home({ searchParams }: PageProps<"/">) {
   const sp = await searchParams;
   // 한 요청의 조회 상한: 가게 이름 검색 2건 + 상권 3건, 카카오 2건(역, 장소 범위는 키워드 1건 + 주변 동 1건).
+  // 범위 안 이름 검색은 상권 3건 + 범위 동마다 이름 1건(최대 3건), 전국 검색 없음. 맨 낱말이면 카카오 지역 후보 2건이 앞에 붙는다.
   // 맨 낱말이 지역으로 풀리면 그 지역을 조회하고 주소를 loc + q로 바꾼다.
   const { h, named, to } = await resolveHome(parseHome(sp));
+  // 범위 안 이름 검색(범위 + q, 영수증 아님)은 상권 조회와 함께 부른다. 프록시는 상권 3건 + 이름 3건이고 전국 검색은 없다.
+  const nearby = !named && !h.id && !h.isDefault ? searchIn(h) : null;
   // 범위 없는 가게 이름 검색은 상권을 조회하지 않는다(기본 상권 피드를 붙이지 않는다). 화면은 이름 검색 결과와 그 지도만 그린다.
   const loaded: Loaded | null = h.isDefault && h.q ? null : await load(h);
   const dataset = loaded?.status === "ok" ? loaded.dataset : null;
-  const searched = named ?? (await search(h, dataset));
-  // 지역 홈의 이름 검색(loc + q)은 보조라서 0곳이거나 실패하면 싣지 않는다(지역 홈만 보인다).
-  const found = !h.isDefault && searched && searched.status !== "ok" ? null : searched;
+  const searched = named ?? (nearby ? await nearby : await search(h, dataset));
+  // 지역 홈의 보조 이름 검색(지역으로 풀린 loc + q)은 0곳이거나 실패하면 싣지 않는다(지역 홈만 보인다).
+  // 범위 안 이름 검색(scopeTitle)은 0곳과 실패도 싣는다(그 지역에서 찾지 못했다는 안내를 보인다).
+  const found = !h.isDefault && searched && searched.status !== "ok" && !searched.scopeTitle ? null : searched;
   const data: HomeData = { query: h, dataset, search: found, presets: PRESETS, place: loaded?.status === "ok" ? loaded.place : null };
   return (
     <main id="main" className="home">

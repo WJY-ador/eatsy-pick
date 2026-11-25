@@ -115,8 +115,9 @@ export function HomeView({ data }: { data: HomeData }) {
   /**
    * 지역 홈 + 그 낱말이 이름에 들어간 가게(맨 낱말이 지역으로 풀림, 상권 분석의 영수증 링크도 같은 꼴). 이름 검색은 지도 아래 보조 섹션이다.
    * 영수증을 열어 주소에 id가 붙어도 같은 배치를 유지한다(새로고침해도 같은 화면).
+   * 범위 안 이름 검색(search.scopeTitle, 머리말에서 메뉴나 가게 이름을 지금 지역과 함께 검색)은 보조가 아니라 피드 위 검색 자리에 그린다.
    */
-  const regionNamed = !h.isDefault && !!h.q;
+  const regionNamed = !h.isDefault && !!h.q && !search?.scopeTitle;
   const router = useRouter();
   const sp = useSearchParams();
   const geo = useGeo();
@@ -538,7 +539,18 @@ export function HomeView({ data }: { data: HomeData }) {
       </p>
 
       {search && !regionNamed ? (
-        <SearchResults search={search} feedNote={nameOnly ? null : region} exclude={exclude} distanceOf={distanceOf} onPick={openStore} onShowChains={toggleExclude} selectedId={selectedId} />
+        <SearchResults
+          search={search}
+          within={search.scopeTitle ? (nearShown ? "내 주변" : `${search.scopeTitle} 주변`) : null}
+          basis={origin?.label ?? null}
+          clearHref={search.scopeTitle ? homeHref(scope, { near: h.near, excludeFranchise: exclude, theme, sort }) : undefined}
+          feedNote={nameOnly ? null : region}
+          exclude={exclude}
+          distanceOf={distanceOf}
+          onPick={openStore}
+          onShowChains={toggleExclude}
+          selectedId={selectedId}
+        />
       ) : null}
 
       {nameOnly ? (
@@ -700,6 +712,8 @@ export function HomeView({ data }: { data: HomeData }) {
 function SearchResults({
   search,
   aux = false,
+  within = null,
+  basis = null,
   clearHref = "/",
   feedNote,
   exclude,
@@ -711,7 +725,11 @@ function SearchResults({
   search: SearchState;
   /** 지역 홈 아래 보조 섹션(그 낱말이 이름에 들어간 가게). 0곳이나 실패면 그리지 않는다 */
   aux?: boolean;
-  /** 검색 지우기 주소(보조 섹션이면 지금 지역 홈) */
+  /** 범위 안 이름 검색의 범위 표기(강남역 주변, 내 주변). 있으면 제목과 안내를 그 범위로 쓴다 */
+  within?: string | null;
+  /** 거리 기준점 이름(내 위치, 강남역 중심). 범위 안 검색의 가까운 순 안내에 쓴다 */
+  basis?: string | null;
+  /** 검색 지우기 주소(보조 섹션과 범위 안 검색이면 지금 지역 홈) */
   clearHref?: string;
   /** 아래 피드의 지역 이름. 피드가 없으면(이름만 검색) null */
   feedNote: string | null;
@@ -729,8 +747,9 @@ function SearchResults({
     .map((s, i) => ({ s, i, d: distanceOf(s) }))
     .sort((a, b) => (a.d ?? Number.POSITIVE_INFINITY) - (b.d ?? Number.POSITIVE_INFINITY) || a.i - b.i);
   if (aux && search.status !== "ok") return null;
-  const label = aux ? `'${search.query}' 이름이 들어간 가게` : `${search.query} 검색`;
-  const after = feedNote ? ` 아래 피드는 ${feedNote}입니다.` : "";
+  const label = aux ? `'${search.query}' 이름이 들어간 가게` : within ? `${within} ${search.query}` : `${search.query} 검색`;
+  // 범위 안 검색은 제목에 범위가 있어 피드 안내를 붙이지 않는다.
+  const after = feedNote && !within ? ` 아래 피드는 ${feedNote}입니다.` : "";
   return (
     <section className="found" aria-labelledby="found-h" data-testid="search-results">
       <div className="found__head">
@@ -738,7 +757,7 @@ function SearchResults({
           {search.status === "error"
             ? `${search.query} 검색 실패`
             : search.status === "empty"
-              ? `${search.query} 검색 결과 없음`
+              ? `${within ? `${within} ` : ""}${search.query} 검색 결과 없음`
               : shown.length === 0
                 ? `${label}, 프랜차이즈 ${hidden}곳 숨김`
                 : `${label} ${shown.length}곳`}
@@ -752,7 +771,13 @@ function SearchResults({
           가게 검색이 실패했습니다. 잠시 뒤 다시 시도해 주세요.{after}
         </p>
       ) : search.status === "empty" ? (
-        <p className="found__p">이 이름의 가게를 찾지 못했습니다. 이름을 줄이거나 동네, 역 이름과 함께 검색해 보세요.{after}</p>
+        within ? (
+          <p className="found__p">
+            {within}에서 {search.query} 이름의 가게를 찾지 못했습니다.
+          </p>
+        ) : (
+          <p className="found__p">이 이름의 가게를 찾지 못했습니다. 이름을 줄이거나 동네, 역 이름과 함께 검색해 보세요.{after}</p>
+        )
       ) : (
         <>
           {hidden > 0 ? (
@@ -763,7 +788,11 @@ function SearchResults({
               </button>
             </p>
           ) : null}
-          {shown.length > 1 && !aux ? <p className="found__p">지점이 여러 곳입니다. 지역과 주소를 보고 고르세요.</p> : null}
+          {within ? (
+            basis && shown.length > 1 ? <p className="found__p">{basis} 기준 가까운 순입니다.</p> : null
+          ) : shown.length > 1 && !aux ? (
+            <p className="found__p">지점이 여러 곳입니다. 지역과 주소를 보고 고르세요.</p>
+          ) : null}
           {shown.length > 0 ? (
             <ul className="found__list">
               {shown.slice(0, more).map(({ s, d }) => (
