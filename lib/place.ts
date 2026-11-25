@@ -98,8 +98,11 @@ export function rangesNear(first: string, nearDocs: KakaoDoc[]): string[] {
   return [first, ...more].slice(0, MAX_RANGES);
 }
 
-function keywordUrl(query: string): string {
-  return `${ENDPOINT}?${new URLSearchParams({ query, size: "15" }).toString()}`;
+/** 키워드 검색 주소. category를 주면 그 분류만 받는다(자동완성의 역 보강 조회) */
+function keywordUrl(query: string, category?: string): string {
+  const params = new URLSearchParams({ query, size: "15" });
+  if (category) params.set("category_group_code", category);
+  return `${ENDPOINT}?${params.toString()}`;
 }
 
 async function kakao(url: string, key: string): Promise<KakaoDoc[] | null> {
@@ -165,7 +168,11 @@ export async function regionForWord(word: string): Promise<string | null> {
 }
 
 // ---------- 머리말 검색 자동완성(장소) ----------
-// 키워드 검색 1건만 부른다. 항목 글자를 그대로 제출하므로 갈 곳이 있는 것만 낸다.
+// 키워드 검색 1건이 기본이다. 항목 글자를 그대로 제출하므로 갈 곳이 있는 것만 낸다.
+// 역 보강: 입력이 맨 낱말(공백 없는 한글 2~10자)이고 역으로 끝나지 않으며 첫 조회 항목에 역이 없으면,
+// 지하철역 분류(SW8)로 한 번 더 부르고 그 역을 서버 항목 맨 앞에 둔다. 맨 지명은 첫 조회 15건에 역이 없을 수 있다
+// (2026-11-25 운영 실측: 잠실 0건, 석촌은 서울석촌동고분군만). 이 경우 한 입력의 호출은 최대 2건이다.
+// 보강 호출이 실패하면 전체를 실패(null)로 본다(역 없는 목록이 하루 캐시에 남지 않게).
 // 지하철역(역 이름 꼴이라 역으로 풀린다)과, 맨 낱말 꼴(공백 없는 한글 2~10자) 이름의 장소.
 // 맨 낱말 장소는 제출하면 잇플 이름 검색이 0곳일 때만 regionForWord가 그 자리로 푼다(가게가 걸리면 이름 검색 결과가 뜬다).
 // 장소 분류는 분류 없음(시장, 공원, 기차역), 관광지와 명소, 문화시설만 받는다. 음식점과 카페는 내지 않는다
@@ -191,22 +198,30 @@ export async function suggestPlaces(query: string): Promise<Suggestion[] | null>
     return tokens.every((t) => n.includes(t)) ? 2 : -1;
   };
   const seen = new Set<string>();
-  const out: (Suggestion & { r: number })[] = [];
-  for (const d of docs) {
-    const code = d.category_group_code ?? "";
-    const station = code === SUBWAY;
-    if (!station && !SUGGEST_GROUPS.has(code)) continue;
-    const name = placeName(d);
-    if (!name || (!station && !BARE_WORD.test(name))) continue;
-    const r = rank(name);
-    if (r < 0 || seen.has(name)) continue;
-    seen.add(name);
-    out.push({ text: name, kind: station ? "station" : "place", r });
+  /** 받을 문서를 항목으로 바꾼다. 이름이 같은 문서(같은 역의 다른 노선)는 앞의 것만. 일치 순위 순 */
+  const collect = (list: KakaoDoc[]): (Suggestion & { r: number })[] => {
+    const items: (Suggestion & { r: number })[] = [];
+    for (const d of list) {
+      const code = d.category_group_code ?? "";
+      const station = code === SUBWAY;
+      if (!station && !SUGGEST_GROUPS.has(code)) continue;
+      const name = placeName(d);
+      if (!name || (!station && !BARE_WORD.test(name))) continue;
+      const r = rank(name);
+      if (r < 0 || seen.has(name)) continue;
+      seen.add(name);
+      items.push({ text: name, kind: station ? "station" : "place", r });
+    }
+    return items.sort((a, b) => a.r - b.r);
+  };
+  const out = collect(docs);
+  let stations: (Suggestion & { r: number })[] = [];
+  if (BARE_WORD.test(q) && !q.endsWith("역") && !out.some((s) => s.kind === "station")) {
+    const subway = await kakao(keywordUrl(q, SUBWAY), key);
+    if (!subway) return null;
+    stations = collect(subway.filter((d) => d.category_group_code === SUBWAY));
   }
-  return out
-    .sort((a, b) => a.r - b.r)
-    .slice(0, SUGGEST_MAX)
-    .map(({ text, kind }) => ({ text, kind }));
+  return [...stations, ...out].slice(0, SUGGEST_MAX).map(({ text, kind }) => ({ text, kind }));
 }
 
 // ---------- 지역 후보(상권 랭킹의 지역 추가, 지역 변경) ----------
