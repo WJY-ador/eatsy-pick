@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import Script from "next/script";
 import "pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css";
 import "./globals.css";
-import { InappBanner } from "@/components/InappBanner";
+import { InappRedirect } from "@/components/InappRedirect";
 import { RecordsSheet } from "@/components/Records";
 import { SiteFooter, SiteHeader } from "@/components/SiteChrome";
 import { SITE_DESCRIPTION, SITE_NAME, shareImages, shareTwitterImages, siteUrl } from "@/lib/site";
@@ -40,7 +40,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <a className="skip" href="#main">
           본문으로 건너뛰기
         </a>
-        <InappBanner />
+        <InappRedirect />
         <SiteHeader />
         {children}
         <SiteFooter />

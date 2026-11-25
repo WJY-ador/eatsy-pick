@@ -18,10 +18,10 @@ const MAP_H_WIDE = 480;
 /** 지도 위아래 여백(고정 머리말 아래, 화면 아래) */
 const GAP = 8;
 
-/** 고정된 머리말(상단 바, 인앱 안내) 아래 끝 */
+/** 고정된 머리말(상단 바) 아래 끝 */
 function stickyBottom(): number {
   let bottom = 0;
-  for (const el of document.querySelectorAll("header, .inapp")) {
+  for (const el of document.querySelectorAll("header")) {
     const pos = getComputedStyle(el).position;
     if (pos !== "sticky" && pos !== "fixed") continue;
     const r = el.getBoundingClientRect();

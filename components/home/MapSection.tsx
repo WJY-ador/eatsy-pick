@@ -66,13 +66,10 @@ function byRank(a: Row, b: Row): number {
   return ra === rb ? a.i - b.i : ra - rb;
 }
 
-/**
- * 스크롤한 뒤 고정 머리말이 가릴 높이. 지금 붙어 있지 않은 머리말도 센다
- * (페이지 맨 위에서는 인앱 안내가 상단 바를 아래로 밀어 r.top > 1이다. 스크롤하면 상단 바는 top 값 자리에 붙는다).
- */
+/** 스크롤한 뒤 고정 머리말(상단 바)이 가릴 높이. 지금 붙어 있지 않아도 top 값 자리에 붙는다고 보고 센다 */
 function stuckHeight(): number {
   let bottom = 0;
-  for (const el of document.querySelectorAll("header, .inapp")) {
+  for (const el of document.querySelectorAll("header")) {
     const cs = getComputedStyle(el);
     if (cs.position !== "sticky" && cs.position !== "fixed") continue;
     const top = Number.parseFloat(cs.top);
@@ -185,9 +182,9 @@ export function MapSection({ stores, origin, originLabel, focus, me, near, locat
   const count = rows.length;
 
   // 지도 보기(홈 지역 줄): 지도 인스턴스, 조건, 선택, 정렬은 그대로 두고 자리만 옮긴다. 주소 기록을 남기지 않으려고 해시 대신 스크롤한다.
-  // html의 scroll-padding-top(768px 이상 96px, 미만은 펼친 상단 바와 인앱 안내 높이의 합)이 scrollIntoView에 더해지므로, 고정 머리말 높이로 직접 계산한다.
+  // html의 scroll-padding-top(768px 이상 96px, 미만은 펼친 상단 바 높이)이 scrollIntoView에 더해지므로, 고정 머리말 높이로 직접 계산한다.
   // 768px 미만은 아래로 옮기므로 상단 바를 먼저 접어 묶고(바로잡기 스크롤까지 다시 펼치지 않게) 접힌 높이를 쓴다.
-  // 그 높이는 섹션 높이를 정하는 CSS의 --mapsec-top(인앱 안내 + 상단 바 - 접히는 부분)과 같아서, 도착하면 섹션이 화면 아래 끝까지 맞는다.
+  // 그 높이는 섹션 높이를 정하는 CSS의 --mapsec-top(상단 바 - 접히는 부분)과 같아서, 도착하면 섹션이 화면 아래 끝까지 맞는다.
   // 부드러운 스크롤 중에 위쪽 높이가 바뀌면(추천 섹션이 늦게 끼어드는 경우 등) 멈춘 뒤 한 번 바로잡는다. 그 사이 사용자가 스크롤하면 바로잡지 않는다.
   useImperativeHandle(
     ref,

@@ -29,8 +29,6 @@ export const SITE_TAGLINE = "내 주변에서 고르고, 다음 약속에 다시
 
 /** 잇플 링크 문구 (규칙 1, 2026-11-23 홈 개편 요청 원문: 실시간 붐빔 &#183; 메뉴 보기 ↗, &#183;은 가운뎃점 U+00B7) */
 export const MER_LINK_TEXT = "실시간 붐빔 · 메뉴 보기 ↗";
-/** 인앱 브라우저 안내 배너 문구 (규칙 3 원문) */
-export const INAPP_BANNER_TEXT = "집계·원활한 이동을 위해 Safari/Chrome으로 열어주세요";
 /** 의무 표기 첫 줄: 푸터와 카드마다 (규칙 4 원문) */
 export const ATTRIBUTION = "eat.pl 잇플 · BC카드 결제 데이터 기반";
 /** 의무 표기 둘째 줄: 푸터 (규칙 4 원문) */

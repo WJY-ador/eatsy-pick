@@ -5,7 +5,7 @@
 /* Hallmark · user direction (2026-11-23, discovery feed): white page, light grey rules, charcoal, orange #EA580C for the selected pin and main actions; sticky top bar with search; chips, briefing, curations, then map */
 /* Hallmark · pre-emit critique: P4 H4 E4 S4 R5 V3 · weakest: V, a familiar map-plus-list tool; the user asked for that familiarity, the receipt carries the identity */
 /* Hallmark · user direction beats a dealt theme (2026-11-23): white panels on soft grey, charcoal, hairline rules, blue for data and selection, orange for the eat.pl link; one family; no emoji, no traffic-light colour */
-/* Hallmark · contest and user copy, Floor 10 and gate 63 recorded, not waivable: the BC카드 contest strings (the 잇플 link text, the in-app banner, the attribution, the disclaimer) keep their single middle dot and arrow verbatim */
+/* Hallmark · contest and user copy, Floor 10 and gate 63 recorded, not waivable: the BC카드 contest strings (the 잇플 link text, the attribution, the disclaimer) keep their single middle dot and arrow verbatim */
 /* Hallmark · user copy, Floor 10 recorded, not waivable: the visit signal is "a small blue dot and a short label" in the user's own words (components/visits); the dot always sits beside a text label, never alone */
 @import url("./tokens.css");
 @import url("./base.css");
@@ -39,7 +39,7 @@ h1, h2, h3 { color: var(--color-ink); font-weight: 700; letter-spacing: var(--tr
 .chip:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
 
 /* Top bar: fixed to the top on every page. Phone: logo and three links on one line (fits at 390px), search under it. 768px up: one line */
-.top { position: sticky; top: var(--banner-height, 0px); z-index: var(--z-sticky-nav); background: var(--color-panel); border-bottom: var(--rule-hair) solid var(--color-rule); }
+.top { position: sticky; top: 0; z-index: var(--z-sticky-nav); background: var(--color-panel); border-bottom: var(--rule-hair) solid var(--color-rule); }
 .top__in { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "logo nav" "search search"; align-items: center; column-gap: var(--space-sm); row-gap: var(--space-2xs); width: 100%; max-width: var(--container); margin-inline: auto; padding: var(--space-2xs) var(--gutter) var(--space-xs); }
 .top .wordmark { grid-area: logo; }
 .top__search { grid-area: search; min-width: 0; }
@@ -48,7 +48,7 @@ h1, h2, h3 { color: var(--color-ink); font-weight: 700; letter-spacing: var(--tr
 .top__link:hover { color: var(--color-ink); text-decoration: underline var(--rule-hair); text-underline-offset: 0.25em; }
 .top__btn { border: 0; background: none; font-family: var(--font-body); cursor: pointer; }
 .top__link:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
-/* Phone: scrolling down slides the logo and menu line up under the banner (or off screen) and keeps the search line. Transform only, so the page does not move. lib/top-fold sets data-top-folded and --top-fold */
+/* Phone: scrolling down slides the logo and menu line up off screen and keeps the search line. Transform only, so the page does not move. lib/top-fold sets data-top-folded and --top-fold */
 @media (max-width: 47.99rem) {
   .top { transition: transform var(--dur-short) var(--ease-out); }
   html[data-top-folded] .top { transform: translateY(calc(-1 * var(--top-fold, 0px))); }
@@ -70,38 +70,6 @@ h1, h2, h3 { color: var(--color-ink); font-weight: 700; letter-spacing: var(--tr
 .container--narrow { max-width: var(--container); }
 .wordmark { display: inline-flex; align-items: center; min-height: 44px; color: var(--color-ink); font-size: var(--text-lg); font-weight: 800; letter-spacing: -0.01em; text-decoration: none; }
 .wordmark:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; border-radius: 4px; }
-
-/* In-app browser band: thin, ink, above the top bar */
-.inapp { position: sticky; top: 0; z-index: calc(var(--z-sticky-nav) + 1); background: var(--color-ink); color: var(--color-panel); --color-focus: var(--color-panel); }
-.inapp__row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); min-height: 56px; padding-block: var(--space-xs); }
-.inapp__msg { display: grid; gap: var(--space-3xs); min-width: 0; }
-.inapp__text { font-size: var(--text-sm); font-weight: 600; line-height: 1.35; }
-.inapp__hint { font-size: var(--text-xs); line-height: 1.35; color: var(--color-paper-3); }
-.inapp__actions { display: flex; flex-shrink: 0; align-items: center; gap: var(--space-2xs); }
-.inapp__copy,
-.inapp__btn { flex-shrink: 0; display: inline-flex; align-items: center; min-height: 44px; padding: 0 var(--space-md); border-radius: var(--radius-pill); background: var(--color-panel); color: var(--color-ink); font-size: var(--text-sm); font-weight: 700; text-decoration: none; white-space: nowrap; }
-.inapp__copy { border: 0; font-family: var(--font-body); cursor: pointer; }
-.inapp__copy:hover, .inapp__copy:active,
-.inapp__btn:hover, .inapp__btn:active { background: var(--color-paper-3); }
-.inapp__copy:focus-visible,
-.inapp__btn:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
-.inapp__manual { padding-bottom: var(--space-xs); }
-.inapp__url { display: block; width: 100%; box-sizing: border-box; min-height: 44px; padding: var(--space-2xs) var(--space-xs); border: 1px solid var(--color-muted); border-radius: var(--radius-input); background: var(--color-panel); color: var(--color-ink); font: var(--text-xs)/1.4 var(--font-body); overflow-wrap: anywhere; resize: none; }
-.inapp__url:focus-visible { outline: 2px solid var(--color-panel); outline-offset: 2px; }
-.inapp__cover { position: fixed; inset: 0; z-index: var(--z-toast); display: flex; align-items: flex-end; justify-content: center; padding: var(--space-md); background: color-mix(in oklch, var(--color-ink) 72%, transparent); overflow-y: auto; }
-.inapp__sheet { display: grid; gap: var(--space-sm); width: 100%; max-width: 28rem; box-sizing: border-box; padding: var(--space-lg) var(--space-md) var(--space-md); border-radius: var(--radius-input); background: var(--color-ink); color: var(--color-panel); outline: none; }
-.inapp__cover-title { font-size: var(--text-lg); font-weight: 700; line-height: 1.35; }
-.inapp__cover-guide { font-size: var(--text-sm); line-height: 1.5; color: var(--color-paper-3); }
-.inapp__cover-actions { display: flex; gap: var(--space-2xs); }
-.inapp__cover-actions > :is(.inapp__copy, .inapp__btn) { flex: 1 1 0; justify-content: center; }
-.inapp__cover-close { min-height: 44px; border: 1px solid var(--color-muted); border-radius: var(--radius-pill); background: transparent; color: var(--color-panel); font: 600 var(--text-sm)/1.2 var(--font-body); cursor: pointer; }
-.inapp__cover-close:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
-@media (max-width: 32rem) {
-  .inapp__row { flex-wrap: wrap; }
-  .inapp__msg { flex: 1 1 100%; }
-  .inapp__actions { width: 100%; }
-  .inapp__actions > :is(.inapp__copy, .inapp__btn) { flex: 1 1 0; justify-content: center; }
-}
 
 /* The eat.pl link, filled orange. White on #EA580C passes only as large bold text, so the filled link keeps 19px bold */
 .cta { display: flex; align-items: center; justify-content: center; min-height: 48px; padding: 0 var(--space-md); border-radius: var(--radius-input); background: var(--color-cta); color: var(--color-cta-ink); font-size: var(--text-xl); font-weight: 700; line-height: 1.2; text-align: center; text-decoration: none; transition: background-color var(--dur-micro) var(--ease-out); }
