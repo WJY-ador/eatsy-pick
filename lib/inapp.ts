@@ -15,15 +15,6 @@ export type InappInfo = { kind: InappKind; os: Os; iosMajor: number | null } | n
  */
 export type AutoOpen = { href: string; navigate: "assign" | "replace" | "iframe" };
 
-/** 외부 브라우저로 다시 여는 방법 */
-export type ExternalOpen = {
-  /** 버튼 주소. 사용자가 누를 때 쓴다 */
-  href: string;
-  label: string;
-  /** 첫 진입 때 자동 시도. 없으면 버튼만 */
-  auto: AutoOpen | null;
-};
-
 /** LINE 외부 브라우저 열기 쿼리(LINE Developers 문서). 도착 뒤 주소에서 지운다. */
 export const LINE_EXTERNAL_PARAM = "openExternalBrowser";
 
@@ -63,72 +54,41 @@ export function detectInapp(ua: string | null | undefined): InappInfo {
   return { kind, os, iosMajor: os === "ios" ? iosMajorOf(ua) : null };
 }
 
-function chromeIntent(currentUrl: string, fallback: boolean): string {
+function chromeIntent(currentUrl: string): string {
   const u = new URL(currentUrl);
   // intent 주소의 #은 Intent 구획 시작이다. 페이지 해시(#res-h)는 붙이지 않는다.
   const rest = `${u.host}${u.pathname}${u.search}`;
   const scheme = u.protocol.replace(":", "");
-  // Chrome이 없어 intent가 풀리지 않을 때, 이 값을 처리하는 앱은 현재 주소를 다시 연다(Chrome 문서의 S.browser_fallback_url).
-  const fb = fallback ? `S.browser_fallback_url=${encodeURIComponent(currentUrl)};` : "";
-  return `intent://${rest}#Intent;scheme=${scheme};package=com.android.chrome;${fb}end`;
+  return `intent://${rest}#Intent;scheme=${scheme};package=com.android.chrome;end`;
 }
 
 /**
- * 우리 페이지를 외부 브라우저로 다시 여는 방법. 없으면 null(문장으로 안내).
- * - 카카오톡: kakaotalk://web/openExternal?url= (iOS, 안드로이드). 자동.
- * - LINE: 주소에 openExternalBrowser=1 (LINE Developers 문서). 자동.
- * - 안드로이드 기타: Chrome intent. 자동은 숨긴 iframe으로, 버튼은 현재 문서 이동으로.
+ * 첫 진입 때 우리 페이지를 외부 브라우저로 한 번 자동으로 다시 여는 방법. 없으면 null(아무것도 하지 않는다).
+ * 화면에는 아무것도 그리지 않는다. 이동이 실패하면 우리 페이지를 그대로 보여 준다.
+ * - 카카오톡: kakaotalk://web/openExternal?url= (iOS, 안드로이드).
+ * - LINE: 주소에 openExternalBrowser=1 (LINE Developers 문서).
+ * - 안드로이드 기타: 숨긴 iframe에 Chrome intent.
  *   package를 빼면 기본 브라우저가 네이버 앱일 때 인앱으로 되돌아올 수 있어 Chrome으로 고정한다.
- * - iOS 17 이상 기타: x-safari-https://. 자동 한 번, 버튼도 같은 주소.
- *   Meta 웹뷰는 스크립트 이동을 무시한다는 보고가 있다. 실패해도 페이지가 바뀌지 않고, 덮는 안내가 남는다.
- * - iOS 16 이하 기타: 덮는 안내만.
+ * - iOS 17 이상 기타: x-safari-https://.
+ *   Meta 웹뷰는 스크립트 이동을 무시한다는 보고가 있다. 실패해도 페이지가 바뀌지 않는다.
+ * - iOS 16 이하 기타: 시도하지 않는다.
  * 자동 시도는 휴대폰(iOS, 안드로이드)에서만 한다.
  */
-export function externalOpen(info: NonNullable<InappInfo>, currentUrl: string): ExternalOpen | null {
-  const mobile = info.os !== "other";
+export function autoOpen(info: NonNullable<InappInfo>, currentUrl: string): AutoOpen | null {
+  if (info.os === "other") return null;
   if (info.kind === "kakaotalk") {
-    const href = `kakaotalk://web/openExternal?url=${encodeURIComponent(currentUrl)}`;
-    return { href, label: "브라우저로 열기", auto: mobile ? { href, navigate: "assign" } : null };
+    return { href: `kakaotalk://web/openExternal?url=${encodeURIComponent(currentUrl)}`, navigate: "assign" };
   }
   if (info.kind === "line") {
     const u = new URL(currentUrl);
     u.searchParams.set(LINE_EXTERNAL_PARAM, "1");
-    const href = u.toString();
-    return { href, label: "브라우저로 열기", auto: mobile ? { href, navigate: "replace" } : null };
+    return { href: u.toString(), navigate: "replace" };
   }
-  if (info.os === "android") {
-    return {
-      href: chromeIntent(currentUrl, true),
-      label: "Chrome으로 열기",
-      auto: { href: chromeIntent(currentUrl, false), navigate: "iframe" },
-    };
-  }
-  if (info.os === "ios" && info.iosMajor !== null && info.iosMajor >= 17 && /^https?:\/\//.test(currentUrl)) {
-    const href = `x-safari-${currentUrl}`;
-    return { href, label: "Safari로 열기", auto: { href, navigate: "assign" } };
+  if (info.os === "android") return { href: chromeIntent(currentUrl), navigate: "iframe" };
+  if (info.iosMajor !== null && info.iosMajor >= 17 && /^https?:\/\//.test(currentUrl)) {
+    return { href: `x-safari-${currentUrl}`, navigate: "assign" };
   }
   return null;
-}
-
-/** iOS에서 강제 전환이 안 될 수 있는 앱은 화면을 덮는 안내를 띄운다 */
-export function needsCover(info: NonNullable<InappInfo>): boolean {
-  return info.os === "ios" && info.kind !== "kakaotalk" && info.kind !== "line";
-}
-
-/** 그 앱에서 외부 브라우저로 여는 메뉴 위치 */
-export function menuGuide(info: NonNullable<InappInfo>): string {
-  switch (info.kind) {
-    case "instagram":
-    case "threads":
-    case "facebook":
-      return "오른쪽 위 점 세 개(⋯) 메뉴에서 외부 브라우저로 열기를 누르세요.";
-    case "naver":
-      return "아래쪽 점 세 개(⋯) 메뉴에서 다른 브라우저로 열기를 누르세요.";
-    case "kakaotalk":
-      return "오른쪽 아래 점 세 개(⋯) 메뉴에서 다른 브라우저로 열기를 누르세요.";
-    case "line":
-      return "오른쪽 위 점 세 개(⋯) 메뉴에서 기본 브라우저로 열기를 누르세요.";
-  }
 }
 
 /** 주소에서 LINE 외부 열기 쿼리를 뺀 주소. 없으면 null */

@@ -43,11 +43,11 @@
 }
 
 @media (max-width: 767.98px) {
-  /* --mapsec-top is the sticky header height once the top bar folds (in-app banner + top bar - folded part; InappBanner and lib/top-fold set the variables).
+  /* --mapsec-top is the sticky header height once the top bar folds (top bar - folded part; lib/top-fold sets the variables).
      Scrolling down to the map folds the bar, and the map jump folds it first, so the section ends at the bottom of the viewport on arrival.
      Only a section with stores fills the viewport; the empty notice keeps its own height.
      On a short screen (a phone held sideways) the section stays at least 480px tall so the map keeps about 240px, and the page scrolls past it. */
-  .mapsec { --mapsec-top: calc(var(--banner-height, 0px) + var(--top-h, 0px) - var(--top-fold, 0px)); }
+  .mapsec { --mapsec-top: calc(var(--top-h, 0px) - var(--top-fold, 0px)); }
   .mapsec:has(> .mapsec__body) { display: flex; flex-direction: column; height: calc(100dvh - var(--mapsec-top)); min-height: 480px; padding-bottom: var(--space-xs); }
   .mapsec__body { flex: 1; min-height: 0; grid-template-rows: minmax(0, 7fr) minmax(0, 3fr); }
   .mapsec__map, .mapsec__map .storemap, .mapsec__map .storemap__wrap { height: 100%; min-height: 0; }

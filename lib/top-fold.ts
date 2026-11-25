@@ -31,17 +31,11 @@ export function topFoldable(): boolean {
   return typeof window !== "undefined" && window.matchMedia(TOP_FOLD_MQ).matches && !!header();
 }
 
-/** 인앱 안내 띠 높이. 없으면 0 */
-function bannerHeight(): number {
-  return document.querySelector<HTMLElement>(".inapp")?.offsetHeight ?? 0;
-}
-
-/** 고정 머리말(인앱 안내와 상단 바)이 지금 상태에서 가리는 높이. 768px 이상이거나 상단 바가 없으면 null */
+/** 고정 머리말(상단 바)이 지금 상태에서 가리는 높이. 768px 이상이거나 상단 바가 없으면 null */
 export function topStuck(): number | null {
   const h = header();
   if (!h || !window.matchMedia(TOP_FOLD_MQ).matches) return null;
-  const banner = bannerHeight();
-  return Math.round(Math.max(banner, banner + h.offsetHeight - (folded ? foldPx : 0)));
+  return Math.round(Math.max(0, h.offsetHeight - (folded ? foldPx : 0)));
 }
 
 function apply(next: boolean, instant: boolean) {
@@ -85,11 +79,11 @@ function clampY(): number {
   return Math.min(Math.max(window.scrollY, 0), max);
 }
 
-/** 접으면 안 되는 때: 상단 바 안에 초점(검색창 입력 등), 시트, 영수증, 덮는 안내, 목록 팝업이 열림 */
+/** 접으면 안 되는 때: 상단 바 안에 초점(검색창 입력 등), 시트, 영수증, 목록 팝업이 열림 */
 function blocked(h: HTMLElement): boolean {
   const a = document.activeElement;
   if (a && a !== document.body && h.contains(a)) return true;
-  return !!document.querySelector('aside.rc, aside.sheet, [aria-modal="true"], [role="listbox"]');
+  return !!document.querySelector('aside.rc, aside.sheet, [role="listbox"]');
 }
 
 function measure(h: HTMLElement) {
