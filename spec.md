@@ -79,6 +79,23 @@ eatsy-pick은 내 주변에서 실제 BC카드 결제 데이터를 바탕으로 
 - GA4에서 `q`, `d`, `lat`, `lng` 쿼리 값을 가리도록 설정했다. 홍보 링크의 UTM은 도착 URL에 보존한다. 개인정보 안내에 실제 수집 범위를 반영하고, CRM 메모나 공용 URL에 넣지 않은 사용자 데이터를 별도 이벤트로 보내지 않는다.
 - 배포 후 UTM이 붙은 상권 링크로 접속해 GA4 실시간 보고서에서 페이지 조회와 `eatpl_click` 수신을 확인한다. GA4는 사이트의 버튼 클릭을 측정한다. BC카드 대회 순 방문자는 주최 측 집계에서 확인한다.
 
+### 채널별 홍보 링크
+
+지금은 **채널별 유입만** 본다. 새로 올리는 글이나 단톡방에는 해당 채널의 기본 링크를 재사용한다. `utm_source`와 `utm_medium`을 고정하고, 글, 단톡방, 상권별 `utm_campaign`이나 `utm_content`는 새로 만들지 않는다.
+
+| 공유 채널 | 복사용 기본 링크 |
+|---|---|
+| 카카오톡 | [카카오톡용](https://eatsy-pick.vercel.app/?utm_source=kakao&utm_medium=group_chat) |
+| 스레드 | [스레드용](https://eatsy-pick.vercel.app/?utm_source=threads&utm_medium=organic_social) |
+| 네이버 블로그 | [네이버 블로그용](https://eatsy-pick.vercel.app/?utm_source=naver_blog&utm_medium=referral) |
+| 블라인드 | [블라인드용](https://eatsy-pick.vercel.app/?utm_source=blind&utm_medium=referral) |
+
+상권으로 바로 보내고 싶을 때는 상권 주소에 같은 채널의 UTM 두 개만 붙인다. 예를 들어 광화문 상권 분석을 카카오톡에 보낼 때는 [광화문 카카오톡용 링크](https://eatsy-pick.vercel.app/analysis?area=gwanghwamun&utm_source=kakao&utm_medium=group_chat)를 쓴다. 상권이 달라도 GA4에서는 같은 카카오톡 유입으로 본다.
+
+GA4 트래픽 획득 보고서의 `세션 소스/매체`에서 채널별 유입을 확인한다. 기존 2호선 블로그 4편은 이미 `naver_blog / referral / line2_station_guide`가 붙어 있다. 기존 링크는 그대로 쓰고, 채널을 비교할 때는 `naver_blog / referral`로 함께 본다. [GA4의 UTM 측정기준](https://support.google.com/analytics/answer/11242870?hl=ko)
+
+UTM은 `eatsy-pick.vercel.app`의 홍보 주소에만 붙인다. 잇플 상세는 API의 `merUrl`을 원본 그대로 열고, 단축 주소나 중간 리다이렉트를 붙이지 않는다.
+
 ## 이어서 작업할 때
 
 - 이번 세션에서 Codex는 자료 조사, 기획 인터뷰, Markdown 기록, Claude 전달 문안과 구현 결과 검토를 맡는다. 앱 구현은 Claude가 맡는다.
