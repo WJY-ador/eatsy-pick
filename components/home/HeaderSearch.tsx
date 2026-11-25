@@ -5,7 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 import { setNavPending } from "@/components/NavLink";
 import { foodCategory } from "@/lib/food";
-import { analysisHref, bareWordFood, parseHome } from "@/lib/home-params";
+import { analysisHref, bareWordFood, homeSearchHref, parseHome } from "@/lib/home-params";
 
 export const SEARCH_PLACEHOLDER = "동네, 역, 음식점 검색";
 const Q_MAX = 40;
@@ -71,7 +71,7 @@ export function SearchForm({ initial = "" }: { initial?: string }) {
         }
         // 경로는 제출 시점의 주소에서 읽는다(Suspense 대기 중의 폼도 같은 규칙을 따른다).
         const here = window.location;
-        const href = here.pathname === "/analysis" ? analysisSearchHref(q, here.search) : `/?${new URLSearchParams({ q }).toString()}`;
+        const href = here.pathname === "/analysis" ? analysisSearchHref(q, here.search) : here.pathname === "/" ? homeSearchHref(q, here.search) : `/?${new URLSearchParams({ q }).toString()}`;
         startTransition(() => router.push(href));
       }}
     >
