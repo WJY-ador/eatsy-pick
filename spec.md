@@ -96,6 +96,13 @@ GA4 트래픽 획득 보고서의 `세션 소스/매체`에서 채널별 유입�
 
 UTM은 `eatsy-pick.vercel.app`의 홍보 주소에만 붙인다. 잇플 상세는 API의 `merUrl`을 원본 그대로 열고, 단축 주소나 중간 리다이렉트를 붙이지 않는다.
 
+### 홈 링크 공유 미리보기
+
+- 기본 홈(`/`)과 UTM만 붙인 홈은 같은 서비스 소개를 공개한다. `og:title`과 `twitter:title`은 `BC카드 결제 데이터로 찾는 우리 동네 맛집 | eatsy pick`을 쓴다. `og:description`과 `twitter:description`은 `친구랑 어디 갈지 고민될 때, 동네별 카드 결제 데이터를 보고 가 볼 곳을 골라보세요.`를 쓴다.
+- 홈의 강남역 예시는 첫 화면에서 사용한다. 공유 카드에서 지역명을 쓸 때는 링크에 지정된 지역을 기준으로 한다. 예를 들어 `/?area=seongsu`는 성수 공유 문구를, `/?area=gangnam`은 강남역 공유 문구를 쓴다.
+- 기본 공유 카드에는 서비스 공통 썸네일을 쓴다. 기본 홈의 `og:url`은 `/`을 기준으로 하고, 사용자가 카톡 공유 링크를 열면 도착 주소에서 기존 채널 UTM을 읽을 수 있어야 한다.
+- 구현과 배포 후 `/`, `/?utm_source=kakao&utm_medium=group_chat`, `/?area=seongsu&utm_source=kakao&utm_medium=group_chat`의 공개 메타태그를 확인한다. 카톡에서 기본 링크를 다시 공유해 서비스 소개 문구가 보이는지 확인한다.
+
 ## 이어서 작업할 때
 
 - 이번 세션에서 Codex는 자료 조사, 기획 인터뷰, Markdown 기록, Claude 전달 문안과 구현 결과 검토를 맡는다. 앱 구현은 Claude가 맡는다.
