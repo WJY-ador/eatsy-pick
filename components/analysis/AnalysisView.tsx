@@ -30,6 +30,7 @@ import { customerLabel, peakLabel } from "@/lib/labels";
 import { displayName } from "@/lib/store-view";
 import type { AreaDataset, Store } from "@/lib/stores";
 import { holdTop } from "@/lib/top-fold";
+import { tidyUrl } from "@/lib/utm";
 import { PeakTable } from "./Charts";
 import { useHelp } from "./Help";
 import { PyramidChart } from "./Pyramid";
@@ -248,9 +249,10 @@ export function AnalysisView({ dataset, scope, fellBack }: { dataset: AreaDatase
   const path = analysisPath(scope, applied);
 
   // 들어온 주소에 버려진 값이 있으면 실제로 적용한 필터의 주소로 바꿔 둔다(기록은 늘리지 않는다).
+  // 홍보 링크의 UTM은 뒤에 남기고, UTM 말고 다른 차이가 없으면 주소를 바꾸지 않는다(lib/utm).
   useEffect(() => {
-    const now = `${window.location.pathname}${window.location.search}`;
-    if (now !== path) window.history.replaceState(null, "", path);
+    const url = tidyUrl(path, window.location);
+    if (url) window.history.replaceState(null, "", url);
   }, [path]);
 
   const setFilters = (next: Filters) => {

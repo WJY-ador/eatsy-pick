@@ -23,6 +23,7 @@ import { displayName, distanceLabel, distanceM, dongLocOf } from "@/lib/store-vi
 import type { Store } from "@/lib/stores";
 import { CURATIONS, isThemeId, matchTheme, type ThemeId, THEMES, Y2030_SUB } from "@/lib/themes";
 import { setHomeContext } from "@/lib/ui-state";
+import { withUtm } from "@/lib/utm";
 import { useVisits, type VisitRecord } from "@/lib/visits";
 import { Briefing } from "./Briefing";
 import { RegionChips, ThemeChips } from "./Chips";
@@ -199,7 +200,8 @@ export function HomeView({ data }: { data: HomeData }) {
       const href = homeHref(next, { near: true, ...keep });
       // 이미 같은 동네를 내 주변으로 보고 있으면 위치만 갱신하고 서버를 다시 부르지 않는다.
       if (h.near && !h.q && !h.food && href === homeHref(h.scope, { near: true, ...keep })) return;
-      go(href);
+      // 자동 확인은 사용자 동작 없이 도착 주소를 바꾸므로 홍보 링크의 UTM을 남긴다(lib/utm). 누른 이동에는 붙이지 않는다.
+      go(mode === "auto" ? withUtm(href, window.location.search) : href);
     },
     [presets, go, exclude, theme, sort, h.near, h.q, h.food, h.scope],
   );
@@ -218,7 +220,9 @@ export function HomeView({ data }: { data: HomeData }) {
       const last = readLastRegion();
       if (last && homeHref(last) !== homeHref(h.scope)) {
         const p = new URLSearchParams(window.location.search);
-        go(homeHref(last, { excludeFranchise: p.get("fr") !== "0", theme: isThemeId(p.get("t")) ? (p.get("t") as ThemeId) : "all", sort: p.get("s") === "rank" ? "rank" : "near" }), true);
+        // 도착 주소를 바꾸는 자동 이동이라 홍보 링크의 UTM을 남긴다(lib/utm).
+        const href = homeHref(last, { excludeFranchise: p.get("fr") !== "0", theme: isThemeId(p.get("t")) ? (p.get("t") as ThemeId) : "all", sort: p.get("s") === "rank" ? "rank" : "near" });
+        go(withUtm(href, window.location.search), true);
       }
     });
     return () => {
@@ -238,7 +242,8 @@ export function HomeView({ data }: { data: HomeData }) {
     const g = getGeo();
     if (!g.gu || g.retriedGu || (scope.kind === "loc" && scope.loc === g.gu)) return;
     setGeo({ retriedGu: true });
-    go(homeHref({ kind: "loc", loc: g.gu }, { near: true, excludeFranchise: exclude, theme, sort }), true);
+    // 자동 다시 조회라 지금 주소의 UTM을 남긴다(lib/utm). UTM이 없으면 주소는 그대로다.
+    go(withUtm(homeHref({ kind: "loc", loc: g.gu }, { near: true, excludeFranchise: exclude, theme, sort }), window.location.search), true);
   }, [h.near, dataset, scope, go, exclude, theme, sort]);
 
   // ----- 후보 집합 하나: 지역 조회 결과 → 프랜차이즈 제외. 브리핑, 큐레이션, 지도와 목록이 모두 여기서 나온다 -----

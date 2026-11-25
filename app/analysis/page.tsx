@@ -9,6 +9,7 @@ import { BARE_WORD } from "@/lib/home-params";
 import { customerLabel } from "@/lib/labels";
 import { SITE_NAME, shareImages, shareTwitterImages } from "@/lib/site";
 import { loadArea } from "@/lib/stores";
+import { withUtm } from "@/lib/utm";
 import { lookupName } from "@/lib/word-region";
 
 export const maxDuration = 30;
@@ -72,7 +73,8 @@ async function AnalysisData({ searchParams }: { searchParams: PageProps<"/analys
     const { region } = await lookupName(scope.store, true);
     // replace(기본값): 검색 이동이 넣은 q 주소의 기록 자리를 도착 주소로 바꾼다. 같은 화면(/analysis) 안의 이동이다.
     // push로 하면 q 주소가 기록에 남아 뒤로 가기가 다시 같은 곳으로 보내진다(2026-11-24 실측).
-    if (region) redirect(analysisPath({ kind: "loc", loc: region, food: scope.food }, null));
+    // 홍보 링크의 UTM은 도착 주소에 남긴다(lib/utm).
+    if (region) redirect(withUtm(analysisPath({ kind: "loc", loc: region, food: scope.food }, null), raw));
   }
   return (
     <div className={s.inner}>
