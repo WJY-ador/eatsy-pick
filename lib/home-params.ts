@@ -19,6 +19,8 @@ export type HomeQuery = {
   scope: HomeScope;
   /** 쿼리 없는 첫 진입(강남역 예시) */
   isDefault: boolean;
+  /** 링크가 지역을 정했는가(area, loc, 지역으로 풀리는 q). false면 scope는 기본 상권이고 공유 문구와 주소에 그 이름을 넣지 않는다 */
+  scoped: boolean;
   near: boolean;
   q: string | null;
   /** 음식 검색어가 대응표에 있으면 그 업종(이때 q는 null, foodTerm에 원래 말) */
@@ -185,6 +187,7 @@ export function parseHome(raw: Raw): HomeQuery {
   return {
     scope: scope ?? areaScope(DEFAULT_SLUG),
     isDefault,
+    scoped: scope !== null,
     near: first(raw.near) === "1" && !isDefault,
     q,
     food,
@@ -204,9 +207,9 @@ export function scopeEntries(scope: HomeScope): [string, string][] {
   return scope.kind === "area" ? [["area", scope.slug]] : [["loc", scope.loc]];
 }
 
-/** 홈 경로. 좌표는 어떤 경우에도 넣지 않는다 */
+/** 홈 경로. 좌표는 어떤 경우에도 넣지 않는다. scope가 null이면 지역 없이 낸다(쿼리가 없으면 "/") */
 export function homeHref(
-  scope: HomeScope,
+  scope: HomeScope | null,
   o: {
     near?: boolean;
     q?: string | null;
@@ -216,14 +219,14 @@ export function homeHref(
     sort?: HomeSort;
   } = {},
 ): string {
-  const e: [string, string][] = scopeEntries(scope);
+  const e: [string, string][] = scope ? scopeEntries(scope) : [];
   if (o.near) e.push(["near", "1"]);
   if (o.q) e.push(["q", o.q]);
   if (o.id) e.push(["id", o.id]);
   if (o.excludeFranchise === false) e.push(["fr", "0"]);
   if (o.theme && o.theme !== "all") e.push(["t", o.theme]);
   if (o.sort === "rank") e.push(["s", "rank"]);
-  return `/?${new URLSearchParams(e).toString()}`;
+  return e.length ? `/?${new URLSearchParams(e).toString()}` : "/";
 }
 
 /**

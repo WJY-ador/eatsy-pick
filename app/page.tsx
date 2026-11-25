@@ -52,7 +52,7 @@ async function resolveHome(parsed: HomeQuery): Promise<{ h: HomeQuery; named: Se
   if (!parsed.q || parsed.id) return { h: parsed, named: null, to: null };
   const { search: named, region } = await nameLookup(parsed.q, parsed.isDefault);
   if (!region) return { h: parsed, named, to: null };
-  const h: HomeQuery = { ...parsed, scope: { kind: "loc", loc: region }, isDefault: false, near: false };
+  const h: HomeQuery = { ...parsed, scope: { kind: "loc", loc: region }, isDefault: false, scoped: true, near: false };
   const to = homeHref(h.scope, { q: h.q, excludeFranchise: h.excludeFranchise, theme: h.theme, sort: h.sort });
   return { h, named, to };
 }
@@ -89,24 +89,35 @@ export async function generateMetadata({ searchParams }: PageProps<"/">): Promis
       : `${name}${h.food ? ` ${foodDisplayName(h.food)}` : ""} 가게를 BC카드 결제 데이터로 확인하세요.${theme ? ` ${theme} 조건이 적용된 매장을 지도에서 보고 저장할 수 있습니다.` : " 매출 상위 1%, 동네맛집, 회식 적합 조건으로 찾아보고 저장할 수 있습니다."}`;
   // 공유 주소와 OG에는 범위, 검색어, 테마만 넣는다(near, 좌표, 개인 기록 없음).
   // 가게 이름 검색은 범위 없이 낸다(기본 상권을 붙이지 않는다). 지역으로 풀린 낱말은 loc + q.
+  // 링크가 지역을 정하지 않았으면(테마만, 음식만) 기본 상권을 붙이지 않고 링크에 있던 조건만 낸다.
   const canonical = plain
     ? "/"
     : nameSearch
       ? `/?${new URLSearchParams({ q: nameSearch }).toString()}`
-      : homeHref(h.scope, { q: h.q && !h.id ? h.q : h.foodTerm, theme: h.theme });
+      : homeHref(h.scoped ? h.scope : null, { q: h.q && !h.id ? h.q : h.foodTerm, theme: h.theme });
   const foodName = h.food ? foodDisplayName(h.food) : null;
-  const shareTitle = nameSearch ? title : `BC카드 결제 데이터로 비교한 ${name}${foodName ? ` ${foodName}` : ""} 맛집 | ${SITE_NAME}`;
+  // 지역명은 링크에 지역이 지정됐을 때만 쓴다(spec.md 홈 링크 공유 미리보기). 강남역은 첫 화면 예시일 뿐 공유 문구에 넣지 않는다.
+  // 지역 없는 링크(기본 홈, UTM만 붙은 홈, 테마만, 음식만. parseHome은 utm_를 읽지 않는다)는 서비스 소개를 쓰고, 음식이 있으면 그 음식을 넣는다.
+  const shareTitle = nameSearch
+    ? title
+    : h.scoped
+      ? `BC카드 결제 데이터로 비교한 ${name}${foodName ? ` ${foodName}` : ""} 맛집 | ${SITE_NAME}`
+      : `BC카드 결제 데이터로 찾는 우리 동네 ${foodName ? `${foodName} ` : ""}맛집 | ${SITE_NAME}`;
   const shareDescription = nameSearch
     ? description
-    : foodName
-      ? `BC카드 결제 데이터로 ${name} ${foodName} 매장의 매출 상위 1%, 동네맛집, 회식 적합 표시를 확인하세요.`
-      : `BC카드 결제 데이터로 ${name}의 매출 상위 1%, 동네맛집, 회식 적합 매장을 확인하세요.`;
+    : !h.scoped
+      ? foodName
+        ? `BC카드 결제 데이터로 우리 동네 ${foodName} 매장의 매출 상위 1%, 동네맛집, 회식 적합 표시를 확인하세요.`
+        : "친구랑 어디 갈지 고민될 때, 동네별 카드 결제 데이터를 보고 가 볼 곳을 골라보세요."
+      : foodName
+        ? `BC카드 결제 데이터로 ${name} ${foodName} 매장의 매출 상위 1%, 동네맛집, 회식 적합 표시를 확인하세요.`
+        : `BC카드 결제 데이터로 ${name}의 매출 상위 1%, 동네맛집, 회식 적합 매장을 확인하세요.`;
   return {
     title: { absolute: title },
     description,
     alternates: { canonical },
-    openGraph: { type: "website", locale: "ko_KR", siteName: SITE_NAME, url: canonical, title: shareTitle, description: shareDescription, images: shareImages(title) },
-    twitter: { card: "summary_large_image", title: shareTitle, description: shareDescription, images: shareTwitterImages(title) },
+    openGraph: { type: "website", locale: "ko_KR", siteName: SITE_NAME, url: canonical, title: shareTitle, description: shareDescription, images: shareImages(shareTitle) },
+    twitter: { card: "summary_large_image", title: shareTitle, description: shareDescription, images: shareTwitterImages(shareTitle) },
   };
 }
 
