@@ -67,6 +67,12 @@ h1, h2, h3 { color: var(--color-ink); font-weight: 700; letter-spacing: var(--tr
 .hs__go:hover { color: var(--color-cta-text); }
 .hs__go:focus-visible { outline: 2px solid var(--color-focus); outline-offset: -4px; }
 .hs__go[aria-busy="true"] { cursor: progress; color: var(--color-muted); }
+/* Related search terms under the field. In the DOM only while open, so lib/top-fold keeps the bar unfolded. Width follows the field, long names end in an ellipsis. Eight 44px rows fit without a scrollbar (lib/suggest SUGGEST_MAX) */
+.hs__list { position: absolute; top: calc(100% + var(--space-2xs)); left: 0; right: 0; z-index: var(--z-raised); max-height: min(calc(8 * 44px + 2 * var(--space-2xs) + 2 * var(--rule-hair)), 60vh); margin: 0; padding: var(--space-2xs) 0; overflow-y: auto; overscroll-behavior: contain; list-style: none; background: var(--color-panel); border: var(--rule-hair) solid var(--color-rule); border-radius: var(--radius-panel); }
+.hs__opt { display: flex; align-items: center; gap: var(--space-sm); min-height: 44px; padding: 0 var(--space-md); color: var(--color-ink); cursor: pointer; }
+.hs__opt:hover, .hs__opt[aria-selected="true"] { background: var(--color-paper-3); }
+.hs__text { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hs__kind { flex: none; color: var(--color-muted); font-size: var(--text-sm); }
 .container--narrow { max-width: var(--container); }
 .wordmark { display: inline-flex; align-items: center; min-height: 44px; color: var(--color-ink); font-size: var(--text-lg); font-weight: 800; letter-spacing: -0.01em; text-decoration: none; }
 .wordmark:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; border-radius: 4px; }

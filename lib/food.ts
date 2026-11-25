@@ -24,6 +24,9 @@ const TABLE: [string[], string][] = [
 /** 대응표의 업종 값. 블로그 초안 검사(scripts/blog-check.mjs)가 업종 이름 어휘로 쓴다 */
 export const FOOD_CATEGORIES: string[] = TABLE.map(([, cat]) => cat);
 
+/** 대응표의 음식 표현(표 순서). 머리말 검색 자동완성(lib/suggest.ts)이 쓴다 */
+export const FOOD_WORDS: string[] = TABLE.flatMap(([words]) => words);
+
 const BY_WORD = new Map<string, string>(TABLE.flatMap(([words, cat]) => words.map((w) => [w, cat] as [string, string])));
 
 /** 검색어 전체가 대응표의 음식 표현이면 그 업종, 아니면 null(상호나 동네 검색으로 간다) */

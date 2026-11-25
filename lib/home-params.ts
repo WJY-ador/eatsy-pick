@@ -11,7 +11,8 @@ import { type ThemeId, isThemeId } from "./themes";
 
 export const DEFAULT_SLUG = "gangnam";
 const LOC_MAX = 30;
-const Q_MAX = 40;
+/** 통합 검색어 길이 상한(머리말 검색칸 maxLength, 자동완성 항목 길이와 같다) */
+export const Q_MAX = 40;
 
 export type HomeScope = { kind: "area"; slug: string; name: string } | { kind: "loc"; loc: string };
 

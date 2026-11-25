@@ -4,7 +4,9 @@
 // Next 전용 API를 import하지 않는다(일반 Node에서는 fetch의 next 옵션이 무시된다).
 
 import type { PlaceHit } from "./home-data";
+import { BARE_WORD } from "./home-params";
 import { METRO, shortSido, unitOf } from "./my-areas";
+import { SUGGEST_MAX, type Suggestion } from "./suggest";
 
 const ENDPOINT = "https://dapi.kakao.com/v2/local/search/keyword.json";
 const CATEGORY_ENDPOINT = "https://dapi.kakao.com/v2/local/search/category.json";
@@ -160,6 +162,51 @@ export async function regionForWord(word: string): Promise<string | null> {
   const picked = asWord ? pickPlace(asWord, w, false) : null;
   if (!picked || SHOP.has(picked.category) || !picked.hit.name.startsWith(w)) return null;
   return picked.category === SUBWAY || picked.category === ATTRACTION || picked.hit.name === w ? w : null;
+}
+
+// ---------- 머리말 검색 자동완성(장소) ----------
+// 키워드 검색 1건만 부른다. 항목 글자를 그대로 제출하므로 갈 곳이 있는 것만 낸다.
+// 지하철역(역 이름 꼴이라 역으로 풀린다)과, 맨 낱말 꼴(공백 없는 한글 2~10자) 이름의 장소.
+// 맨 낱말 장소는 제출하면 잇플 이름 검색이 0곳일 때만 regionForWord가 그 자리로 푼다(가게가 걸리면 이름 검색 결과가 뜬다).
+// 장소 분류는 분류 없음(시장, 공원, 기차역), 관광지와 명소, 문화시설만 받는다. 음식점과 카페는 내지 않는다
+// (카카오 이름이 잇플 상호와 달라 이름 검색이 0곳이 될 수 있다). 은행, 병원, 편의점처럼 갈 곳이 없는 분류도 뺀다.
+// 이름이 입력과 맞는 것만: 앞부분 일치, 중간 일치, 낱말마다 들어 있음 순. 같은 순위는 카카오 순서.
+
+/** 자동완성 장소로 받는 분류 코드(지하철역 밖) */
+const SUGGEST_GROUPS = new Set(["", ATTRACTION, "CT1"]);
+
+/** 자동완성 장소. 키가 없거나 호출이 실패하면 null, 결과 없음은 빈 배열 */
+export async function suggestPlaces(query: string): Promise<Suggestion[] | null> {
+  const key = process.env.KAKAO_REST_KEY;
+  const q = query.replace(/\s+/g, " ").trim();
+  if (!key || !q) return null;
+  const docs = await kakao(keywordUrl(q), key);
+  if (!docs) return null;
+  const whole = q.replace(/ /g, "");
+  const tokens = q.split(" ");
+  const rank = (name: string): number => {
+    const n = name.replace(/\s+/g, "");
+    if (n.startsWith(whole)) return 0;
+    if (n.includes(whole)) return 1;
+    return tokens.every((t) => n.includes(t)) ? 2 : -1;
+  };
+  const seen = new Set<string>();
+  const out: (Suggestion & { r: number })[] = [];
+  for (const d of docs) {
+    const code = d.category_group_code ?? "";
+    const station = code === SUBWAY;
+    if (!station && !SUGGEST_GROUPS.has(code)) continue;
+    const name = placeName(d);
+    if (!name || (!station && !BARE_WORD.test(name))) continue;
+    const r = rank(name);
+    if (r < 0 || seen.has(name)) continue;
+    seen.add(name);
+    out.push({ text: name, kind: station ? "station" : "place", r });
+  }
+  return out
+    .sort((a, b) => a.r - b.r)
+    .slice(0, SUGGEST_MAX)
+    .map(({ text, kind }) => ({ text, kind }));
 }
 
 // ---------- 지역 후보(상권 랭킹의 지역 추가, 지역 변경) ----------

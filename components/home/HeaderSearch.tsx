@@ -2,10 +2,21 @@
 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useMyAreas } from "@/components/area/my-areas-store";
 import { setNavPending } from "@/components/NavLink";
 import { foodCategory } from "@/lib/food";
 import { analysisHref, bareWordFood, parseHome } from "@/lib/home-params";
+import {
+  SUGGEST_DEBOUNCE_MS,
+  SUGGEST_LABEL,
+  type SuggestRow,
+  loadSuggest,
+  localSuggest,
+  mergeSuggest,
+  peekSuggest,
+  serverQuery,
+} from "@/lib/suggest";
 
 export const SEARCH_PLACEHOLDER = "동네, 역, 음식점 검색";
 const Q_MAX = 40;
@@ -40,15 +51,32 @@ export function analysisSearchHref(q: string, current: string): string {
   return analysisHref(h.scope, h.food);
 }
 
+/** 관련 검색어 목록 id. 항목 id는 뒤에 -<순번> */
+const LIST_ID = "site-q-list";
+
 /**
  * 머리말 통합 검색. 스크립트가 없으면 평범한 GET 폼(/?q=)으로 간다.
  * 스크립트가 있으면 같은 주소로 화면 안에서 이동한다(내 위치처럼 메모리에만 있는 상태를 잃지 않게).
  * 맛집 둘러보기에서는 지역, 음식, 가게 이름 검색을 그 화면 안에서 바꾼다(analysisSearchHref). 기록이 남는 이동이다.
+ * 입력하면 칸 아래에 관련 검색어가 뜬다(lib/suggest.ts). 고르면 그 글자로 제출과 똑같이 간다.
+ * 목록은 사용자 입력(글자, 아래 방향키)으로만 열고, 열린 동안만 DOM에 둔다(lib/top-fold가 listbox가 있으면 상단 바를 접지 않는다).
+ * 서버 장소는 입력이 SUGGEST_DEBOUNCE_MS 멈춘 뒤 부르고, 입력이 바뀌거나 닫히면 진행 중 요청을 끊는다. 지금 입력의 응답만 보인다.
  */
 export function SearchForm({ initial = "" }: { initial?: string }) {
   const router = useRouter();
   const [value, setValue] = useState(initial);
   const [pending, startTransition] = useTransition();
+  const [open, setOpen] = useState(false);
+  const [activeKey, setActiveKey] = useState<string | null>(null);
+  // 서버 응답이 memo에 담기면 다시 그린다(값은 쓰지 않는다)
+  const [, setLoaded] = useState(0);
+  const formRef = useRef<HTMLFormElement>(null);
+  const my = useMyAreas();
+  const local = useMemo(() => localSuggest(value, my.custom), [value, my.custom]);
+  const sq = open ? serverQuery(value) : null;
+  const rows = mergeSuggest(local, sq ? peekSuggest(sq) : undefined, sq !== null);
+  const shown = open && rows.length > 0;
+  const activeIdx = shown && activeKey !== null ? rows.findIndex((r) => r.key === activeKey) : -1;
 
   useEffect(() => {
     if (!pending) return;
@@ -56,23 +84,72 @@ export function SearchForm({ initial = "" }: { initial?: string }) {
     return () => setNavPending(false);
   }, [pending]);
 
+  useEffect(() => {
+    if (!sq || peekSuggest(sq)) return;
+    const ctl = new AbortController();
+    const timer = window.setTimeout(() => {
+      void loadSuggest(sq, ctl.signal).then((ok) => {
+        if (ok && !ctl.signal.aborted) setLoaded((n) => n + 1);
+      });
+    }, SUGGEST_DEBOUNCE_MS);
+    return () => {
+      window.clearTimeout(timer);
+      ctl.abort();
+    };
+  }, [sq]);
+
+  // 바깥을 누르면 닫는다(목록 안은 폼 안이다)
+  useEffect(() => {
+    if (!shown) return;
+    const onDown = (e: PointerEvent) => {
+      if (!(e.target instanceof Node) || !formRef.current?.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener("pointerdown", onDown);
+    return () => document.removeEventListener("pointerdown", onDown);
+  }, [shown]);
+
+  useEffect(() => {
+    if (activeIdx >= 0) document.getElementById(`${LIST_ID}-${activeIdx}`)?.scrollIntoView({ block: "nearest" });
+  }, [activeIdx]);
+
+  const close = () => {
+    setOpen(false);
+    setActiveKey(null);
+  };
+
+  // 폼 제출과 항목 고르기가 같이 쓴다
+  const go = (raw: string, input: HTMLInputElement | null) => {
+    const q = raw.replace(/\s+/g, " ").trim();
+    close();
+    if (!q) {
+      input?.focus();
+      return;
+    }
+    // 경로는 제출 시점의 주소에서 읽는다(Suspense 대기 중의 폼도 같은 규칙을 따른다).
+    const here = window.location;
+    const href = here.pathname === "/analysis" ? analysisSearchHref(q, here.search) : `/?${new URLSearchParams({ q }).toString()}`;
+    startTransition(() => router.push(href));
+  };
+
+  const choose = (row: SuggestRow) => {
+    setValue(row.text);
+    go(row.text, null);
+  };
+
   return (
     <form
+      ref={formRef}
       className="hs"
       action="/"
       method="get"
       role="search"
       onSubmit={(e) => {
-        const q = value.replace(/\s+/g, " ").trim();
         e.preventDefault();
-        if (!q) {
-          e.currentTarget.querySelector("input")?.focus();
-          return;
-        }
-        // 경로는 제출 시점의 주소에서 읽는다(Suspense 대기 중의 폼도 같은 규칙을 따른다).
-        const here = window.location;
-        const href = here.pathname === "/analysis" ? analysisSearchHref(q, here.search) : `/?${new URLSearchParams({ q }).toString()}`;
-        startTransition(() => router.push(href));
+        go(value, e.currentTarget.querySelector("input"));
+      }}
+      onBlur={(e) => {
+        // 초점이 폼 밖으로 가면 닫는다(목록은 누를 때 초점을 가져가지 않는다)
+        if (e.relatedTarget instanceof Node && !e.currentTarget.contains(e.relatedTarget)) close();
       }}
     >
       <label className="visually-hidden" htmlFor="site-q">
@@ -87,12 +164,57 @@ export function SearchForm({ initial = "" }: { initial?: string }) {
         enterKeyHint="search"
         autoComplete="off"
         placeholder={SEARCH_PLACEHOLDER}
+        role="combobox"
+        aria-autocomplete="list"
+        aria-expanded={shown}
+        aria-controls={shown ? LIST_ID : undefined}
+        aria-activedescendant={activeIdx >= 0 ? `${LIST_ID}-${activeIdx}` : undefined}
         value={value}
-        onChange={(e) => setValue(e.target.value)}
+        onChange={(e) => {
+          setValue(e.target.value);
+          setOpen(e.target.value.trim() !== "");
+          setActiveKey(null);
+        }}
+        onKeyDown={(e) => {
+          // 한글 조합 중 키로는 항목을 고르거나 옮기지 않는다. 기본 동작(조합 마치기, 브라우저의 제출 규칙)은 막지 않는다
+          // (막으면 조합 중 Enter를 한 번만 보내는 브라우저에서 Enter를 두 번 눌러야 한다)
+          if (e.nativeEvent.isComposing) return;
+          if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+            if (rows.length === 0) return;
+            e.preventDefault();
+            const down = e.key === "ArrowDown";
+            const n = rows.length;
+            // 닫혀 있으면 열고 첫 항목에 선다(열리면 서버 자리 때문에 기기 안 항목 수가 줄 수 있다)
+            const next = !shown ? 0 : activeIdx < 0 ? (down ? 0 : n - 1) : (activeIdx + (down ? 1 : -1) + n) % n;
+            setOpen(true);
+            setActiveKey(rows[next].key);
+          } else if (e.key === "Enter") {
+            if (activeIdx >= 0) {
+              e.preventDefault();
+              choose(rows[activeIdx]);
+            }
+          } else if (e.key === "Escape") {
+            // 열렸을 때만 닫는다(type=search의 Esc 지우기를 막는다). 닫혔을 때는 그대로 둔다
+            if (shown) {
+              e.preventDefault();
+              close();
+            }
+          }
+        }}
       />
       <button type="submit" className="hs__go" aria-label="검색" aria-busy={pending || undefined}>
         <SearchIcon />
       </button>
+      {shown && (
+        <ul id={LIST_ID} className="hs__list" role="listbox" aria-label="관련 검색어" onMouseDown={(e) => e.preventDefault()}>
+          {rows.map((r, i) => (
+            <li key={r.key} id={`${LIST_ID}-${i}`} className="hs__opt" role="option" aria-selected={i === activeIdx} onClick={() => choose(r)}>
+              <span className="hs__text">{r.text}</span>
+              <span className="hs__kind">{SUGGEST_LABEL[r.kind]}</span>
+            </li>
+          ))}
+        </ul>
+      )}
     </form>
   );
 }
