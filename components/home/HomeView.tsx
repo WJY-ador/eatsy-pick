@@ -9,15 +9,15 @@ import { MerLink } from "@/components/MerLink";
 import { NavLink, setNavPending } from "@/components/NavLink";
 import { Sheet } from "@/components/Sheet";
 import { AREAS, areaBySlug } from "@/lib/areas";
-import { briefingOf } from "@/lib/briefing";
 import { AREA_SEARCH_MAX_KM, areaSearchPick, insideStores, loadPanStores, type MapView, PAN_WAIT_MS, type PanStore } from "@/lib/area-search";
 import { assignSections, SECTION_ORDER, type SectionId } from "@/lib/curation-assign";
 import { evidenceLabel } from "@/lib/evidence";
 import { foodDisplayName } from "@/lib/food";
-import { currentPosition, geolocationGranted, getGeo, type LocateError, setGeo, useGeo } from "@/lib/geo-state";
+import { autoAskedInSession, currentPosition, geolocationPermission, getGeo, type LocateError, markAutoAsked, setGeo, useGeo } from "@/lib/geo-state";
 import { geocoderChain, reverseGeocode } from "@/lib/geocode";
 import type { HomeData, SearchState } from "@/lib/home-data";
-import { type HomeScope, type HomeSort, analysisHref, homeHref, scopeName } from "@/lib/home-params";
+import { type HomeScope, type HomeSort, homeHref, scopeName } from "@/lib/home-params";
+import { autoOpen, detectInapp, isBot } from "@/lib/inapp";
 import { recommend } from "@/lib/recommend";
 import { displayName, distanceLabel, distanceM, dongLocOf } from "@/lib/store-view";
 import type { Store } from "@/lib/stores";
@@ -25,10 +25,9 @@ import { CURATIONS, isThemeId, matchTheme, type ThemeId, THEMES, Y2030_SUB } fro
 import { setHomeContext } from "@/lib/ui-state";
 import { withUtm } from "@/lib/utm";
 import { useVisits, type VisitRecord } from "@/lib/visits";
-import { Briefing } from "./Briefing";
 import { RegionChips, ThemeChips } from "./Chips";
 import { CURATION_MAX, Curation } from "./Curation";
-import { MapSection, type MapSectionHandle } from "./MapSection";
+import { MapSection } from "./MapSection";
 import { Receipt } from "./Receipt";
 import { homeRegions, RegionPanel } from "./RegionAdd";
 import { TasteSummary, useHydrated } from "./TasteSummary";
@@ -45,10 +44,9 @@ const SEARCH_PAGE = 8;
 /** 마지막으로 본 지역(이름만, 좌표 없음). 사용자가 직접 고른 지역만 남긴다 */
 const LAST_REGION_KEY = "eatsy:last-region";
 
-// 위치를 못 받았을 때 안내. 까닭과 다음 행동만 적는다. 어느 경우든 보던 지역은 그대로 둔다.
-const LOCATE_FAIL: Record<LocateError | "geocode", string> = {
-  blocked: "이 사이트의 위치 사용이 꺼져 있습니다. 주소창의 사이트 설정에서 위치를 허용한 뒤 내 위치를 다시 눌러 주세요.",
-  off: "위치를 받지 못했습니다. 기기의 위치 서비스가 켜져 있는지 확인한 뒤 내 위치를 다시 눌러 주세요.",
+// 내 주변을 눌렀는데 위치를 못 받았을 때 안내. 까닭과 다음 행동만 적는다. 어느 경우든 보던 지역은 그대로 둔다.
+// 위치가 막힌 경우(거부 응답, blocked와 off)는 안내를 띄우지 않고 내 주변 칩과 지도 내 위치 버튼의 상태로만 보인다.
+const LOCATE_FAIL: Record<Exclude<LocateError, "blocked" | "off"> | "geocode", string> = {
   timeout: "위치를 찾는 데 시간이 오래 걸려 멈췄습니다. 잠시 뒤 내 위치를 다시 눌러 주세요.",
   unsupported: "이 브라우저에서는 위치를 쓸 수 없습니다. 지역을 직접 입력해 주세요.",
   unavailable: "지금은 위치를 확인하지 못했습니다. 잠시 뒤 내 위치를 다시 눌러 주세요.",
@@ -82,6 +80,21 @@ function patchUrl(patch: Record<string, string | null>, push = false) {
   if (url === `${window.location.pathname}${window.location.search}`) return;
   if (push) window.history.pushState(null, "", url);
   else window.history.replaceState(null, "", url);
+}
+
+/** 주소의 테마, 프랜차이즈 제외, 정렬(주소가 정본이다). 위치를 기다리는 사이에 바뀌었어도 지금 값을 쓴다 */
+function keepFromUrl(): { excludeFranchise: boolean; theme: ThemeId; sort: HomeSort } {
+  const p = new URLSearchParams(window.location.search);
+  const t = p.get("t");
+  return { excludeFranchise: p.get("fr") !== "0", theme: isThemeId(t) ? t : "all", sort: p.get("s") === "rank" ? "rank" : "near" };
+}
+
+/** 검색 로봇, 링크 미리보기 수집기, 자동화 브라우저, 외부 브라우저로 자동으로 넘길 인앱 브라우저. 여기서는 위치를 먼저 묻지 않는다 */
+function noAutoAsk(): boolean {
+  const ua = navigator.userAgent;
+  if (navigator.webdriver || isBot(ua)) return true;
+  const inapp = detectInapp(ua);
+  return !!inapp && autoOpen(inapp, window.location.href) !== null;
 }
 
 function readLastRegion(): HomeScope | null {
@@ -160,10 +173,23 @@ export function HomeView({ data }: { data: HomeData }) {
   const nearShown = h.near && geo.me !== null;
 
   // ----- 내 주변 -----
+  /** 홈이 붙어 있는가. 권한 창의 답을 기다리는 사이 홈을 떠났으면 자동 이동을 멈춘다 */
+  const mounted = useRef(false);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  // click: 내 주변을 눌렀다. auto: 권한이 이미 있어 들어오자마자 찾는다. ask: 권한 창을 띄워 묻는다(답을 기다리는 동안 찾는 중 표시를 켜지 않아 내 주변 칩을 막지 않는다).
+  // 위치를 받아 내 주변으로 갔거나 이미 그 동네를 내 주변으로 보고 있으면 true.
   const locate = useCallback(
-    async (mode: "auto" | "click") => {
-      if (getGeo().locating) return;
-      setGeo({ locating: true });
+    async (mode: "auto" | "ask" | "click"): Promise<boolean> => {
+      const quiet = mode === "ask";
+      if (!quiet) {
+        if (getGeo().locating) return false;
+        setGeo({ locating: true });
+      }
       if (mode === "click") {
         setMessage(null);
         setDenied(false);
@@ -173,62 +199,71 @@ export function HomeView({ data }: { data: HomeData }) {
       try {
         pos = await currentPosition();
       } catch (e) {
-        setGeo({ locating: false });
-        const err = (e as LocateError) in LOCATE_FAIL ? (e as LocateError) : "unavailable";
+        if (!quiet) setGeo({ locating: false });
         // 자동 확인이 실패하면 조용히 지나간다(사용자가 누르지 않았다). 버튼의 사선도 누른 뒤에만 켠다.
+        // 막힌 위치(거부 응답)는 안내 없이 버튼 상태로만 보인다.
         if (mode === "click") {
-          if (err === "blocked" || err === "off") setDenied(true);
-          setMessage(LOCATE_FAIL[err]);
+          if (e === "blocked" || e === "off") setDenied(true);
+          else setMessage(LOCATE_FAIL[(e as string) in LOCATE_FAIL ? (e as keyof typeof LOCATE_FAIL) : "unavailable"]);
         }
-        return;
+        return false;
+      }
+      if (quiet) {
+        // 권한 창에 답하는 사이 사용자가 지역을 골랐거나 내 주변을 눌렀으면 그 흐름에 맡긴다.
+        if (!mounted.current || userPicked.current || urlHasChoice() || getGeo().locating) return false;
+        setGeo({ locating: true });
       }
       const found = await reverseGeocode(pos.lat, pos.lng, geocoderChain(presets));
-      // 자동 확인 중에 사용자가 지역을 직접 골랐으면 덮어쓰지 않는다.
-      if (mode === "auto" && (userPicked.current || urlHasChoice())) {
+      // 자동 확인 중에 사용자가 지역을 직접 골랐거나 홈을 떠났으면 덮어쓰지 않는다.
+      if (mode !== "click" && (!mounted.current || userPicked.current || urlHasChoice())) {
         setGeo({ locating: false });
-        return;
+        return false;
       }
       if (!found || (!found.presetSlug && !found.dong && !found.gu)) {
         setGeo({ locating: false });
         if (mode === "click") setMessage(LOCATE_FAIL.geocode);
-        return;
+        return false;
       }
       setGeo({ locating: false, me: pos, gu: found.gu, retriedGu: false });
       const next: HomeScope = found.presetSlug
         ? { kind: "area", slug: found.presetSlug, name: AREAS.find((a) => a.slug === found.presetSlug)?.name ?? "" }
         : { kind: "loc", loc: (found.dong ?? found.gu) as string };
-      const keep = { excludeFranchise: exclude, theme, sort };
+      const keep = keepFromUrl();
       const href = homeHref(next, { near: true, ...keep });
       // 이미 같은 동네를 내 주변으로 보고 있으면 위치만 갱신하고 서버를 다시 부르지 않는다.
-      if (h.near && !h.q && !h.food && href === homeHref(h.scope, { near: true, ...keep })) return;
+      if (h.near && !h.q && !h.food && href === homeHref(h.scope, { near: true, ...keep })) return true;
       // 자동 확인은 사용자 동작 없이 도착 주소를 바꾸므로 홍보 링크의 UTM을 남긴다(lib/utm). 누른 이동에는 붙이지 않는다.
-      go(mode === "auto" ? withUtm(href, window.location.search) : href);
+      go(mode === "click" ? href : withUtm(href, window.location.search));
+      return true;
     },
-    [presets, go, exclude, theme, sort, h.near, h.q, h.food, h.scope],
+    [presets, go, h.near, h.q, h.food, h.scope],
   );
 
-  // 조건 없는 첫 진입: 위치 권한이 이미 있으면 내 주변으로 시작한다. 없으면 마지막으로 직접 고른 지역, 그것도 없으면 예시 지역 그대로.
+  // 조건 없는 첫 진입(기본 홈, 주소에 area, loc, q, id가 없다)에서 페이지당 한 번 내 주변을 시도한다. 서버 첫 HTML은 언제나 기본 상권이다.
+  // 권한이 허용돼 있으면 바로 찾는다. 아직 묻지 않은 상태(prompt)면 이 세션에 한 번만 권한 창을 띄운다(sessionStorage).
+  // 거부(denied), 권한 상태를 알 수 없음, 검색 로봇과 자동화 브라우저, 외부 브라우저로 넘길 인앱 브라우저에서는 묻지 않는다.
+  // 위치를 못 받으면(거부, 시간 초과, 주소 변환 실패) 안내 없이 마지막으로 직접 고른 지역, 그것도 없으면 예시 지역 그대로.
+  // 권한 창의 답을 오래 기다릴 수 있어 의존값이 바뀌어도 멈추지 않는다. 홈을 떠났을 때만 멈춘다.
   useEffect(() => {
     if (!h.isDefault || h.q || h.id || getGeo().autoChecked) return;
     setGeo({ autoChecked: true });
-    let alive = true;
-    geolocationGranted().then((ok) => {
-      if (!alive || userPicked.current || urlHasChoice()) return;
-      if (ok) {
-        void locate("auto");
-        return;
+    const stopped = () => !mounted.current || userPicked.current || urlHasChoice();
+    void (async () => {
+      const st = await geolocationPermission();
+      if (stopped()) return;
+      let ok = false;
+      if (st === "granted") ok = await locate("auto");
+      else if (st === "prompt" && !noAutoAsk() && !autoAskedInSession()) {
+        markAutoAsked();
+        ok = await locate("ask");
       }
+      if (ok || stopped()) return;
       const last = readLastRegion();
       if (last && homeHref(last) !== homeHref(h.scope)) {
-        const p = new URLSearchParams(window.location.search);
         // 도착 주소를 바꾸는 자동 이동이라 홍보 링크의 UTM을 남긴다(lib/utm).
-        const href = homeHref(last, { excludeFranchise: p.get("fr") !== "0", theme: isThemeId(p.get("t")) ? (p.get("t") as ThemeId) : "all", sort: p.get("s") === "rank" ? "rank" : "near" });
-        go(withUtm(href, window.location.search), true);
+        go(withUtm(homeHref(last, keepFromUrl()), window.location.search), true);
       }
-    });
-    return () => {
-      alive = false;
-    };
+    })();
   }, [h.isDefault, h.q, h.id, h.scope, locate, go]);
 
   // 사용자가 직접 고른 지역(예시, 내 주변, 매장 이름 검색이 아닌 것)만 기기에 남긴다. 이름만 쓴다.
@@ -247,7 +282,7 @@ export function HomeView({ data }: { data: HomeData }) {
     go(withUtm(homeHref({ kind: "loc", loc: g.gu }, { near: true, excludeFranchise: exclude, theme, sort }), window.location.search), true);
   }, [h.near, dataset, scope, go, exclude, theme, sort]);
 
-  // ----- 후보 집합 하나: 지역 조회 결과 → 프랜차이즈 제외. 브리핑, 큐레이션, 지도와 목록이 모두 여기서 나온다 -----
+  // ----- 후보 집합 하나: 지역 조회 결과 → 프랜차이즈 제외. 큐레이션, 지도와 목록이 모두 여기서 나온다 -----
   const all = useMemo(() => dataset?.stores ?? [], [dataset]);
   /** 이름만 검색의 지도 후보: 프랜차이즈 제외를 적용한 검색 결과 중 좌표가 있는 곳 */
   const nameMapped = useMemo(
@@ -256,7 +291,6 @@ export function HomeView({ data }: { data: HomeData }) {
   );
   const pool = useMemo(() => (exclude ? all.filter((s) => !s.franchise) : all), [all, exclude]);
   const themed = useMemo(() => (theme === "all" ? pool : pool.filter((s) => matchTheme(s, theme))), [pool, theme]);
-  const brief = useMemo(() => briefingOf(pool), [pool]);
 
   // 거리 기준점: 내 주변이면 내 위치, 역이나 장소 검색이면 그 장소, 프리셋이면 상권 중심, 그 밖은 조회 결과 중심.
   const origin: Origin = useMemo(() => {
@@ -428,20 +462,7 @@ export function HomeView({ data }: { data: HomeData }) {
     first?.focus();
   };
 
-  // 지역 줄의 지도 보기: 지도 섹션이 그려질 때만 버튼을 둔다(조회 실패, 0건, 빈 테마에는 없다). 큐레이션 순서는 그대로다.
-  const mapRef = useRef<MapSectionHandle>(null);
-  const mapShown = nameOnly ? nameMapped.length > 0 : !!dataset && pool.length > 0 && themed.length > 0;
-  const onMap = useCallback(() => mapRef.current?.reveal(), []);
-
-  // 지도와 목록에 보이는 수가 분석 대상 수와 다를 때만 숫자로 적는다(지도는 위치 정보가 있는 곳만 그린다). 예: 회식 적합 12곳, 지도 11곳
-  const mapped = themed.filter((s) => s.lat !== null && s.lng !== null).length;
   const themeLabel = THEMES.find((t) => t.id === theme)?.label ?? "";
-  const mapNote =
-    theme !== "all"
-      ? `${themeLabel} ${themed.length}곳${mapped < themed.length ? `, 지도 ${mapped}곳` : ""}`
-      : mapped < pool.length
-        ? `지도 ${mapped}곳`
-        : null;
 
   // ----- 내 저장 패턴과 비슷한 곳 -----
   // 기기 저장 데이터라 붙은 뒤에만 계산한다(서버 렌더에는 추천 섹션이 없다).
@@ -499,9 +520,9 @@ export function HomeView({ data }: { data: HomeData }) {
           current={nameOnly ? NO_SCOPE : scope}
           near={nearShown}
           locating={geo.locating}
+          denied={denied}
           hrefFor={regionHref}
           onNear={onNear}
-          onMap={mapShown ? onMap : undefined}
           panelId={regionPanelId}
           panelOpen={regionPanel !== null}
           onAdd={() => setRegionPanel((m) => (m ? null : "add"))}
@@ -556,7 +577,6 @@ export function HomeView({ data }: { data: HomeData }) {
       {nameOnly ? (
         nameMapped.length > 0 ? (
           <MapSection
-            ref={mapRef}
             stores={nameMapped}
             origin={origin?.point ?? null}
             originLabel={origin?.label ?? ""}
@@ -602,10 +622,29 @@ export function HomeView({ data }: { data: HomeData }) {
         </div>
       ) : (
         <>
-          <div className="feed__top">
-            <Briefing region={region} example={h.isDefault && !h.q} data={brief} exclude={exclude} mapNote={mapNote} analysisHref={analysisHref(scope, h.food, exclude)} />
-            <TasteSummary />
-          </div>
+          {/* 지도와 전체 매장이 칩 바로 아래(첫 화면)에 온다. 내 저장 요약은 그 아래, 큐레이션 위 */}
+          {themed.length > 0 ? (
+            <MapSection
+              stores={themed}
+              origin={origin?.point ?? null}
+              originLabel={origin?.label ?? ""}
+              focus={focus}
+              me={geo.me}
+              near={nearShown}
+              locateState={locateState}
+              onLocate={onLocate}
+              selectedId={selectedId}
+              onOpen={openStore}
+              sort={sort}
+              onSort={pickSort}
+              onAreaSearch={searchArea}
+              onPanView={onPanView}
+              panStores={panShown}
+              onPanPick={openPanned}
+            />
+          ) : null}
+
+          <TasteSummary />
 
           {theme !== "all" && themed.length === 0 ? (
             <div className="state" data-testid="empty-theme">
@@ -642,28 +681,6 @@ export function HomeView({ data }: { data: HomeData }) {
               />
             ))
           )}
-
-          {themed.length > 0 ? (
-            <MapSection
-              ref={mapRef}
-              stores={themed}
-              origin={origin?.point ?? null}
-              originLabel={origin?.label ?? ""}
-              focus={focus}
-              me={geo.me}
-              near={nearShown}
-              locateState={locateState}
-              onLocate={onLocate}
-              selectedId={selectedId}
-              onOpen={openStore}
-              sort={sort}
-              onSort={pickSort}
-              onAreaSearch={searchArea}
-              onPanView={onPanView}
-              panStores={panShown}
-              onPanPick={openPanned}
-            />
-          ) : null}
         </>
       )}
 
