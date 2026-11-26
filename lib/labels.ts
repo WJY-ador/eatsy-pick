@@ -15,9 +15,9 @@ const DAY_FULL: Record<string, string> = {
 
 export const WEEKDAYS = ["월", "화", "수", "목", "금"] as const;
 
-/** "목", "점심" → "목요일 점심" */
-export function peakLabel(day?: string, time?: string): string | null {
-  const d = day ? (DAY_FULL[day] ?? day) : "";
+/** "목", "점심" → "목요일 점심". short면 요일을 받은 그대로 둔다("목 점심", 홈 목록 행의 칩) */
+export function peakLabel(day?: string, time?: string, short = false): string | null {
+  const d = day ? (short ? day : (DAY_FULL[day] ?? day)) : "";
   const t = time ?? "";
   const s = `${d} ${t}`.trim();
   return s || null;

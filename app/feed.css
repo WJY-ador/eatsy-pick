@@ -181,14 +181,31 @@ html[data-nav="pending"] .feed > :is(.taste, .cur, .found, .state, .mapsec, .fee
 .sc .sc__cta { position: relative; z-index: 1; min-height: 44px; padding: 0 var(--space-sm); border: 1.5px solid var(--color-cta); background: var(--color-panel); color: var(--color-cta-text); font-size: var(--text-sm); font-weight: 700; }
 .sc .sc__cta:hover, .sc .sc__cta:active { background: var(--color-cta-press); border-color: var(--color-cta-press); color: var(--color-cta-ink); }
 
-/* Row variant: flat lines inside the map section list, no frame of its own */
-.sc[data-variant="row"] { grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto; align-items: center; gap: var(--space-2xs) var(--space-xs); padding: var(--space-xs) var(--space-2xs) var(--space-xs) var(--space-sm); border: 0; border-radius: 0; box-shadow: none; }
+/* Row variant: flat lines inside the map section list, no frame of its own. Same layout on a phone and in the 40% PC column.
+   Four fixed-height lines so every row is the same height (390px: 8 + 22 + 2 + 20 + 2 + 22 + 4 + 44 + 8 = 132px, plus the 1px rule from the second row):
+   1 name (ellipsis) + local and hoesik flags (small colored text, no frame, never shrink) + distance at the right end, bookmark beside it;
+   2 sales line + an 80px bar (fill = 100 - percent, aria-hidden; no bar without a value);
+   3 peak, customer and category chips on one line, ellipsis instead of wrapping (category gives way first);
+   4 the eat.pl text link in a 44px track. The track stays when the link is absent, so the height does not change. */
+.sc[data-variant="row"] { grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto 44px; align-items: start; gap: var(--space-2xs) var(--space-xs); padding: var(--space-xs) var(--space-2xs) var(--space-xs) var(--space-sm); border: 0; border-radius: 0; box-shadow: none; }
 .sc[data-variant="row"] + .sc[data-variant="row"], li + li > .sc[data-variant="row"] { border-top: var(--rule-hair) solid var(--color-rule); }
 .sc[data-variant="row"][data-active="true"] { background: var(--color-select-soft); box-shadow: inset 3px 0 0 var(--color-select); }
-.sc[data-variant="row"] .sc__open { grid-column: 1; }
-.sc[data-variant="row"] .sc__name { font-size: var(--text-md); -webkit-line-clamp: 1; line-clamp: 1; }
-.sc[data-variant="row"] .sc__bm { position: static; grid-column: 2; grid-row: 1; }
-.sc[data-variant="row"] .sc__cta { grid-column: 1 / -1; justify-self: start; min-height: 44px; }
+.sc[data-variant="row"] .sc__open { grid-column: 1; grid-row: 1; gap: var(--space-3xs); min-height: 0; }
+.sc__line { display: flex; align-items: center; gap: var(--space-xs); height: 22px; min-width: 0; white-space: nowrap; }
+.sc[data-variant="row"] .sc__name { display: block; flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-md); line-height: 22px; }
+.sc__flag { flex: none; font-size: var(--text-xs); font-weight: 700; line-height: 22px; color: var(--color-data); }
+.sc[data-variant="row"] .sc__dist { flex: none; margin-left: auto; font-size: var(--text-xs); line-height: 22px; color: var(--color-ink-2); }
+.sc[data-variant="row"] .sc__rank { display: flex; align-items: center; gap: var(--space-xs); height: 20px; min-width: 0; line-height: 20px; white-space: nowrap; }
+.sc__rank-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.sc__bar { flex: 0 1 80px; min-width: 40px; height: 6px; border-radius: var(--radius-pill); background: var(--color-data-1); overflow: hidden; }
+.sc__bar-fill { display: block; height: 100%; border-radius: inherit; background: var(--color-data); }
+.sc__chips { display: flex; gap: var(--space-2xs); height: 22px; min-width: 0; overflow: hidden; font-size: var(--text-xs); color: var(--color-ink-2); }
+.sc__chips .sc__badge { display: block; flex: 0 1 auto; min-width: 0; line-height: 22px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sc__chips .sc__badge--cat { flex-shrink: 4; }
+.sc[data-variant="row"] .sc__bm { position: static; grid-column: 2; grid-row: 1; margin-top: calc(-1 * var(--space-xs)); }
+.sc__link { position: relative; z-index: 1; grid-column: 1 / -1; grid-row: 2; justify-self: start; display: inline-flex; align-items: center; min-height: 44px; max-width: 100%; color: var(--color-cta-text); font-size: var(--text-sm); font-weight: 700; line-height: 1.2; white-space: nowrap; text-decoration: underline var(--rule-hair); text-underline-offset: 0.25em; border-radius: var(--radius-input); }
+.sc__link:hover, .sc__link:active { color: var(--color-cta-press); }
+.sc__link:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
 @media (hover: hover) { .sc[data-variant="row"]:hover { background: var(--color-bg); } }
 
 /* Store-name search results: one panel in the feed */

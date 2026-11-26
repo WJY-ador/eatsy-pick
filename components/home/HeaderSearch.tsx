@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useMyAreas } from "@/components/area/my-areas-store";
 import { setNavPending } from "@/components/NavLink";
 import { foodCategory } from "@/lib/food";
-import { analysisHref, bareWordFood, homeSearchHref, parseHome } from "@/lib/home-params";
+import { analysisHref, bareWordFood, homeSearchHref, parseHome, scopeName } from "@/lib/home-params";
 import {
   SUGGEST_DEBOUNCE_MS,
   SUGGEST_LABEL,
@@ -61,8 +61,9 @@ const LIST_ID = "site-q-list";
  * 입력하면 칸 아래에 관련 검색어가 뜬다(lib/suggest.ts). 고르면 그 글자로 제출과 똑같이 간다.
  * 목록은 사용자 입력(글자, 아래 방향키)으로만 열고, 열린 동안만 DOM에 둔다(lib/top-fold가 listbox가 있으면 상단 바를 접지 않는다).
  * 서버 장소는 입력이 SUGGEST_DEBOUNCE_MS 멈춘 뒤 부르고, 입력이 바뀌거나 닫히면 진행 중 요청을 끊는다. 지금 입력의 응답만 보인다.
+ * placeholder는 빈 칸에 보이는 안내 글자만 바꾼다(값이 아니다). 숨은 label(접근성 이름)은 언제나 SEARCH_PLACEHOLDER다.
  */
-export function SearchForm({ initial = "" }: { initial?: string }) {
+export function SearchForm({ initial = "", placeholder = SEARCH_PLACEHOLDER }: { initial?: string; placeholder?: string }) {
   const router = useRouter();
   const [value, setValue] = useState(initial);
   const [pending, startTransition] = useTransition();
@@ -163,7 +164,7 @@ export function SearchForm({ initial = "" }: { initial?: string }) {
         maxLength={Q_MAX}
         enterKeyHint="search"
         autoComplete="off"
-        placeholder={SEARCH_PLACEHOLDER}
+        placeholder={placeholder}
         role="combobox"
         aria-autocomplete="list"
         aria-expanded={shown}
@@ -219,16 +220,22 @@ export function SearchForm({ initial = "" }: { initial?: string }) {
   );
 }
 
-/** 홈과 맛집 둘러보기에서는 지금 검색어(q)를 칸에 보인다. 다른 화면에서는 비운다 */
+/**
+ * 홈과 맛집 둘러보기에서는 지금 검색어(q)를 칸에 보인다. 다른 화면에서는 비운다.
+ * 홈을 내 주변(near=1)으로 보고 있으면 빈 칸의 안내 글자를 그 지역 이름으로 바꾼다(loc=강남구 역삼동이면 강남구 역삼동,
+ * area=gangnam이면 강남역). 그 밖에는 SEARCH_PLACEHOLDER다. 안내 글자는 key에 넣지 않는다(바뀌어도 입력 중인 글자를 지우지 않는다).
+ */
 export function HeaderSearch() {
   const path = usePathname();
   const sp = useSearchParams();
+  const home = path === "/" ? parseHome(Object.fromEntries(sp.entries())) : null;
+  const placeholder = home?.near ? scopeName(home.scope) : SEARCH_PLACEHOLDER;
   // 맛집 둘러보기는 가게 이름 조건(q)을 칸에 보인다(지역, 음식 검색 뒤에는 빈다).
   const q = path === "/" || path === "/analysis" ? (sp.get("q") ?? "") : "";
   // 주소의 검색어가 바뀌면 칸을 새로 채운다. 맛집 둘러보기는 지역, 음식, 이름 조건이 바뀔 때(검색, 해제, 뒤로 가기) 새로 채운다.
   // 차트 필터만 바뀔 때는 그대로 둔다.
   const key = path === "/analysis" ? `analysis|${sp.get("area") ?? ""}|${sp.get("loc") ?? ""}|${sp.get("food") ?? ""}|${q}` : q;
-  return <SearchForm key={key} initial={q} />;
+  return <SearchForm key={key} initial={q} placeholder={placeholder} />;
 }
 
 export const EXPLORE_LABEL = "맛집 둘러보기";
