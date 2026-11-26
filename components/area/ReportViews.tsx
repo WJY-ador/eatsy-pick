@@ -1,5 +1,5 @@
 // 상권 랭킹과 업종별 랭킹 본문. 기본 상권(/area/[slug])과 직접 추가한 지역(/area/place)이 같이 쓴다. 서버 컴포넌트.
-// 가게 순위는 RankTable 카드형 목록으로 그린다. 참고 이미지 안내와 대표 피크 뜻은 페이지 첫 목록 위에 한 번만 둔다(RankNote).
+// 가게 순위는 RankTable 카드형 목록으로 그린다. 참고 이미지 안내는 페이지 첫 목록 위에 한 번만 둔다(RankNote).
 // 지도와 영수증에 넘길 매장은 여기서 랭킹 행을 Store로 바꿔 props로 넘긴다(지도를 열 때 다시 조회하지 않는다).
 
 import Link from "next/link";
@@ -44,14 +44,9 @@ function Crumbs({ v, group }: { v: AreaView; group?: boolean }) {
   );
 }
 
-/** 썸네일이 실제 매장 사진이 아니라는 안내(홈 Curation.tsx와 같은 문구)와 대표 피크 띠의 뜻. 페이지에 한 번 */
+/** 썸네일이 실제 매장 사진이 아니라는 안내(홈 Curation.tsx와 같은 문구). 페이지에 한 번 */
 function RankNote() {
-  return (
-    <>
-      <p className="catimg-note">사진은 업종 참고 이미지입니다</p>
-      <p className="catimg-note">대표 피크는 최근 1개월 결제로 본 가장 붐비는 요일과 시간대입니다</p>
-    </>
-  );
+  return <p className="catimg-note">사진은 업종 참고 이미지입니다</p>;
 }
 
 function PlaceNote({ v }: { v: AreaView }) {

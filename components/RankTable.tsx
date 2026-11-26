@@ -11,7 +11,7 @@ import { MerLink } from "./MerLink";
  * 결제 랭킹 목록. 순위 순서 그대로 ol/li 카드형 행으로 그린다(가로 스크롤 없음, 넓은 화면은 2열).
  * 행: 순위 숫자, 업종 참고 이미지 썸네일, 가게명과 업종, 시군구 매출 상위 N% 게이지, 대표 피크 띠, 고객층 1위 칩, 잇플 링크.
  * 게이지는 aria-hidden이고 옆 글자가 같은 값을 낸다. 피크 띠는 role="img" + aria-label로 읽는다.
- * 참고 이미지 안내 한 줄과 대표 피크 뜻은 페이지에 한 번만 둔다(ReportViews RankNote).
+ * 참고 이미지 안내 한 줄은 페이지에 한 번만 둔다(ReportViews RankNote).
  */
 export function RankTable({ rows, caption }: { rows: Row[]; caption: string }) {
   return (
