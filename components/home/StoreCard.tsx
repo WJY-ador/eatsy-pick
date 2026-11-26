@@ -35,8 +35,8 @@ export type StoreCardProps = {
  * card는 위에 16:9 업종 참고 이미지를 둔다. 이미지는 형제이고, 본문 버튼의 누름 영역이 그 위까지 덮는다(feed.css .sc__open::before).
  * row(지도 옆 목록)는 이미지 없는 낮은 행이다. 모든 행이 같은 높이로 네 줄이다(feed.css Row variant).
  *   1줄: 가게명(넘치면 말줄임), 값이 true인 동네맛집, 회식 적합 표시, 오른쪽 끝 거리. 북마크는 그 오른쪽 형제.
- *   2줄: 매출 문구와 짧은 막대(채움 폭 = 100 - 시군구 상위 %, 선형, aria-hidden). 값이 없으면 문구만.
- *     문구는 잘리지 않는다. 좁으면 막대가 먼저 줄고 32px 아래면 숨는다. 그래도 넘치면 시군구 이름(.sc__area)만 말줄임.
+ *   2줄: 매출 문구(시군구 매출 상위 N%, 값이 없으면 매출 순위 미확인).
+ *     좁으면 시군구 이름(.sc__area)만 말줄임하고 매출 상위 N%는 잘리지 않는다.
  *   3줄: 대표 피크, 고객층 1위, 업종 칩. 칩은 줄이지 않고 다 보이거나 통째로 숨는다(뒤에서부터: 업종, 고객층). 값 없는 칩은 뺀다.
  *   4줄: 잇플 링크를 텍스트 링크로(MerLink, className만 다르다).
  */
@@ -47,8 +47,6 @@ export function StoreCard({ store, distanceM, onOpen, variant = "card", active =
   const ranked = typeof store.ccgRank === "number" && Number.isFinite(store.ccgRank);
   const area = store.sigungu || "지역";
   const peak = variant === "row" ? peakLabel(store.peakDay ?? undefined, store.peakTime ?? undefined, true) : null;
-  // 상위일수록 꽉 찬다. 상권 랭킹 게이지와 같은 0~100 선형
-  const fill = ranked ? Math.min(100, Math.max(0, 100 - (store.ccgRank as number))) : 0;
   const rankLine = ranked ? (
     <>
       <span className="sc__area">{area}</span>{" "}
@@ -91,14 +89,7 @@ export function StoreCard({ store, distanceM, onOpen, variant = "card", active =
               {store.hoesik === true ? <span className="sc__flag">회식 적합</span> : null}
               <span className="sc__dist num">{dist ?? "거리 미확인"}</span>
             </span>
-            <span className="sc__rank">
-              <span className="sc__rank-text">{rankLine}</span>
-              {ranked ? (
-                <span className="sc__bar" aria-hidden="true">
-                  <span className="sc__bar-fill" style={{ width: `${fill}%` }} />
-                </span>
-              ) : null}
-            </span>
+            <span className="sc__rank">{rankLine}</span>
             <span className="sc__chips">
               {peak ? <span className="sc__badge">{peak} 피크</span> : null}
               {cust ? <span className="sc__badge">{cust} 1위</span> : null}

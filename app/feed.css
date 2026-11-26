@@ -184,8 +184,7 @@ html[data-nav="pending"] .feed > :is(.taste, .cur, .found, .state, .mapsec, .fee
 /* Row variant: flat lines inside the map section list, no frame of its own. Same layout on a phone and in the 40% PC column.
    Four fixed-height lines so every row is the same height (390px: 8 + 22 + 2 + 20 + 2 + 22 + 4 + 44 + 8 = 132px, plus the 1px rule from the second row):
    1 name (ellipsis) + local and hoesik flags (small colored text, no frame, never shrink) + distance at the right end, bookmark beside it;
-   2 sales line + a bar up to 80px (fill = 100 - percent, aria-hidden; no bar without a value). The text never shrinks first:
-     the bar shrinks, and below 32px it wraps to a clipped second line (hidden). Only then the sigungu name ellipsizes; "매출 상위 N%" stays;
+   2 sales line, text only. When it does not fit, only the sigungu name ellipsizes; "매출 상위 N%" stays;
    3 peak, customer and category chips on one line. Chips never shrink: a chip that does not fit wraps to the clipped second line,
      so whole chips drop from the end (category first, then customer) and none shows half cut.
    Both lines decide by the row's own width, not the viewport (the 40% PC column differs per screen);
@@ -198,13 +197,10 @@ html[data-nav="pending"] .feed > :is(.taste, .cur, .found, .state, .mapsec, .fee
 .sc[data-variant="row"] .sc__name { display: block; flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-md); line-height: 22px; }
 .sc__flag { flex: none; font-size: var(--text-xs); font-weight: 700; line-height: 22px; color: var(--color-data); }
 .sc[data-variant="row"] .sc__dist { flex: none; margin-left: auto; font-size: var(--text-xs); line-height: 22px; color: var(--color-ink-2); }
-.sc[data-variant="row"] .sc__rank { display: flex; flex-wrap: wrap; align-items: center; gap: 0 var(--space-xs); height: 20px; min-width: 0; overflow: hidden; line-height: 20px; white-space: nowrap; }
-.sc__rank-text { display: flex; align-items: baseline; flex: 0 1 auto; min-width: 0; overflow: hidden; }
-.sc__rank-text .sc__area { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.sc[data-variant="row"] .sc__rank { display: flex; align-items: baseline; height: 20px; min-width: 0; overflow: hidden; line-height: 20px; white-space: nowrap; }
+.sc[data-variant="row"] .sc__area { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 /* The space between the two spans drops inside flex, so the row puts it back as a margin (the card keeps the plain space) */
-.sc__rank-text .sc__rank-val { flex: none; margin-left: 0.25em; }
-.sc__bar { flex: 1 1 0; min-width: 32px; max-width: 80px; height: 6px; border-radius: var(--radius-pill); background: var(--color-data-1); overflow: hidden; }
-.sc__bar-fill { display: block; height: 100%; border-radius: inherit; background: var(--color-data); }
+.sc[data-variant="row"] .sc__rank-val { flex: none; margin-left: 0.25em; }
 .sc__chips { display: flex; flex-wrap: wrap; gap: 0 var(--space-2xs); height: 22px; min-width: 0; overflow: hidden; font-size: var(--text-xs); color: var(--color-ink-2); }
 /* max-width only guards a single chip wider than the whole line (does not happen at 257px and up) */
 .sc__chips .sc__badge { display: block; flex: none; max-width: 100%; line-height: 22px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
