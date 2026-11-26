@@ -1,5 +1,6 @@
-/* Home map section (components/home/MapSection.tsx): the map and the full store list.
-   Mobile (<768px): the section fills the viewport below the folded sticky header: heading, map 70%, list 30% with its own scroll.
+/* Home map section (components/home/MapSection.tsx): the map and the full store list. On the home it sits right under the chips.
+   Mobile (<768px): the section fills the viewport below the folded sticky header: heading, a map of clamp(240px, 42dvh, 360px), then the list with its own scroll.
+   The map height is capped so that on the first screen (390x844, unfolded header and chips above) the first list row shows under the map without scrolling.
    PC (>=768px): list 40% on the left with its own scroll, map 60% on the right, same height. */
 .mapsec { display: grid; gap: var(--space-sm); min-width: 0; scroll-margin-top: var(--mapsec-top, 0px); }
 .mapsec__head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--space-xs) var(--space-md); }
@@ -44,12 +45,12 @@
 
 @media (max-width: 767.98px) {
   /* --mapsec-top is the sticky header height once the top bar folds (top bar - folded part; lib/top-fold sets the variables).
-     Scrolling down to the map folds the bar, and the map jump folds it first, so the section ends at the bottom of the viewport on arrival.
+     Scrolling down past the map folds the bar, and the map jump folds it first, so the section ends at the bottom of the viewport on arrival.
      Only a section with stores fills the viewport; the empty notice keeps its own height.
-     On a short screen (a phone held sideways) the section stays at least 480px tall so the map keeps about 240px, and the page scrolls past it. */
+     On a short screen (a phone held sideways) the section stays at least 480px tall and the map keeps 240px, and the page scrolls past it. */
   .mapsec { --mapsec-top: calc(var(--top-h, 0px) - var(--top-fold, 0px)); }
   .mapsec:has(> .mapsec__body) { display: flex; flex-direction: column; height: calc(100dvh - var(--mapsec-top)); min-height: 480px; padding-bottom: var(--space-xs); }
-  .mapsec__body { flex: 1; min-height: 0; grid-template-rows: minmax(0, 7fr) minmax(0, 3fr); }
+  .mapsec__body { flex: 1; min-height: 0; grid-template-rows: clamp(240px, 42dvh, 360px) minmax(0, 1fr); }
   .mapsec__map, .mapsec__map .storemap, .mapsec__map .storemap__wrap { height: 100%; min-height: 0; }
   .mapsec__map .storemap__frame { height: 100%; }
   .mapsec__side { min-height: 0; }

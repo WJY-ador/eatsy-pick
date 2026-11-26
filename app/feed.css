@@ -1,4 +1,4 @@
-/* Home feed: chips, then the payment briefing, then curations, then the map section. One column on a phone, max 1200px on a desktop */
+/* Home feed: chips, then the map section, then the my-saves summary, then curations. One column on a phone, max 1200px on a desktop */
 .feed { display: grid; gap: var(--space-md); min-width: 0; padding-top: var(--space-sm); }
 .feed__filters { display: grid; gap: var(--space-xs); min-width: 0; }
 
@@ -10,6 +10,8 @@
 .chips .chip { gap: var(--space-2xs); padding-inline: var(--space-sm); }
 .chip--near svg { flex-shrink: 0; }
 .chip[aria-busy="true"] { cursor: progress; }
+/* Near chip after a press that got no position (location blocked): muted, the pin is struck through. No notice card */
+.chip--near[data-state="denied"] { color: var(--color-muted); }
 /* Map jump: a short button at the end of the region row, outside the swiping chips, so it never wraps the row or hides in the swipe */
 .chips--region .chips__row { margin-right: 0; padding-right: var(--space-2xs); mask-image: linear-gradient(to right, var(--color-ink) calc(100% - var(--space-lg)), transparent); }
 .mapjump { flex-shrink: 0; display: inline-flex; align-items: center; gap: var(--space-2xs); min-height: 44px; padding: 0 var(--space-sm); border: var(--rule-hair) solid var(--color-ink); border-radius: var(--radius-pill); background: var(--color-panel); color: var(--color-ink); font: 700 var(--text-sm)/1 var(--font-body); white-space: nowrap; cursor: pointer; transition: background-color var(--dur-micro) var(--ease-out); }
@@ -85,31 +87,13 @@
 .feed__close:focus-visible { outline: 2px solid var(--color-focus); outline-offset: -2px; border-radius: var(--radius-input); }
 .feed__loading { display: none; font-size: var(--text-sm); font-weight: 600; color: var(--color-ink-2); }
 html[data-nav="pending"] .feed__loading { display: block; }
-html[data-nav="pending"] .feed > :is(.feed__top, .cur, .found, .state, .mapsec, .feed__none) { opacity: 0.45; transition: opacity var(--dur-short) var(--ease-out); }
+html[data-nav="pending"] .feed > :is(.taste, .cur, .found, .state, .mapsec, .feed__none) { opacity: 0.45; transition: opacity var(--dur-short) var(--ease-out); }
 .feed__none { font-size: var(--text-sm); color: var(--color-ink-2); }
 .state__act { display: flex; flex-wrap: wrap; gap: var(--space-xs); }
 
-/* Payment briefing: one short banner */
-.brief { display: grid; align-content: start; gap: var(--space-2xs); padding: var(--space-sm) var(--space-md); border: var(--rule-hair) solid var(--color-rule); border-radius: var(--radius-panel); background: var(--color-bg); min-width: 0; }
-.brief__body { display: grid; gap: var(--space-3xs); min-width: 0; }
-.brief__k { display: flex; align-items: center; gap: var(--space-xs); font-size: var(--text-sm); font-weight: 700; color: var(--color-ink-2); letter-spacing: 0; }
-.brief__ex { padding: 0 var(--space-xs); border-radius: var(--radius-pill); border: var(--rule-hair) solid var(--color-rule); background: var(--color-panel); font-size: var(--text-xs); font-weight: 600; color: var(--color-ink-2); }
-.brief__main { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: var(--space-xs); font-size: var(--text-lg); color: var(--color-ink); }
-.brief__region { font-weight: 800; }
-.brief__main .num { font-weight: 800; }
-.brief__scope { font-size: var(--text-sm); color: var(--color-ink-2); }
-.brief__cust { font-size: var(--text-sm); color: var(--color-ink-2); }
-.brief__cust strong { color: var(--color-ink); }
-.brief__base { color: var(--color-muted); }
-.brief__note { font-size: var(--text-xs); color: var(--color-muted); }
-.brief__go { justify-self: start; display: inline-flex; align-items: center; gap: var(--space-3xs); min-height: 44px; margin-block: calc(-1 * var(--space-2xs)); color: var(--color-ink); font-size: var(--text-sm); font-weight: 700; text-decoration: underline var(--rule-hair); text-underline-offset: 0.25em; }
-.brief__go:hover { color: var(--color-cta-text); }
-.brief__go:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; border-radius: 4px; }
-
-/* Briefing and my-saves summary: side by side from 1024px; below that the summary sits under the briefing as a 44px swiping chip row
-   plus one pattern line outside the swipe. The summary box keeps the same size before and after the device data arrives, so nothing below it jumps:
-   a fixed 64px block on a phone in every state (before hydration, no saves, holds only, pattern), a fixed minimum height with one-line pattern rows on a desktop. */
-.feed__top { display: grid; gap: var(--space-md); min-width: 0; }
+/* My-saves summary, under the map section. Below 1024px a 44px swiping chip row plus one pattern line outside the swipe;
+   from 1024px one framed strip: label, stage counts and the open link on the first line, the pattern lines on the second.
+   The box keeps the same size before and after the device data arrives (before hydration, no saves, holds only, pattern), so the curations below never jump. */
 .taste { display: grid; grid-template-rows: 44px 18px; row-gap: var(--space-3xs); align-content: start; min-width: 0; height: 64px; }
 /* Chip row swipes to the screen's left edge and fades at the content's right edge, like the theme and region rows above */
 .taste__row { display: flex; align-items: center; gap: var(--space-xs); min-width: 0; margin-left: calc(-1 * var(--gutter)); padding-inline: var(--gutter) var(--space-lg); scroll-padding-inline: var(--gutter); overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; mask-image: linear-gradient(to right, var(--color-ink) calc(100% - var(--space-lg)), transparent); }
@@ -127,21 +111,22 @@ html[data-nav="pending"] .feed > :is(.feed__top, .cur, .found, .state, .mapsec, 
 .taste__pattern, .taste__note { display: none; }
 .taste__sum { min-width: 0; margin: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: var(--text-xs); line-height: 18px; color: var(--color-ink-2); }
 @media (min-width: 64rem) {
-  .feed__top { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: stretch; }
-  .taste { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: none; align-content: start; gap: var(--space-xs) var(--space-sm); height: auto; min-height: 13rem; margin: 0; padding: var(--space-sm) var(--space-md); overflow: visible; border: var(--rule-hair) solid var(--color-rule); border-radius: var(--radius-panel); background: var(--color-bg); }
-  .taste__k { position: static; width: auto; height: auto; overflow: visible; clip-path: none; align-self: center; font-size: var(--text-sm); font-weight: 700; color: var(--color-ink-2); }
-  .taste__open { justify-self: end; margin-block: calc(-1 * var(--space-2xs)); padding: 0; text-decoration: underline var(--rule-hair); text-underline-offset: 0.25em; }
+  .taste { grid-template-columns: auto auto minmax(0, 1fr); grid-template-rows: 44px 20px; align-items: center; gap: var(--space-2xs) var(--space-md); height: auto; padding: var(--space-xs) var(--space-md); border: var(--rule-hair) solid var(--color-rule); border-radius: var(--radius-panel); background: var(--color-bg); }
+  /* Before the device data arrives the box is an empty placeholder of the same size; hide its frame so no blank bordered box flashes */
+  .taste[aria-hidden="true"] { visibility: hidden; }
+  .taste__k { position: static; width: auto; height: auto; overflow: visible; clip-path: none; grid-row: 1; grid-column: 1; font-size: var(--text-sm); font-weight: 700; color: var(--color-ink-2); }
   .taste__row { display: contents; mask-image: none; }
-  .taste__sum { display: none; }
-  .taste__empty { grid-row: auto; align-self: auto; }
+  .taste__stages { grid-row: 1; grid-column: 2; }
+  .taste__open { grid-row: 1; grid-column: 3; justify-self: end; padding: 0; text-decoration: underline var(--rule-hair); text-underline-offset: 0.25em; }
   .taste__open-label { display: none; }
   .taste__open-all { display: inline; }
-  .taste__stages, .taste__empty, .taste__pattern, .taste__note { grid-column: 1 / -1; }
-  .taste__stages { flex-wrap: wrap; }
-  .taste__pattern { display: grid; gap: var(--space-3xs); }
-  .taste__note { display: block; font-size: var(--text-xs); color: var(--color-muted); }
-  .taste__lines { display: grid; gap: var(--space-3xs); margin: 0; padding: 0; list-style: none; font-size: var(--text-sm); color: var(--color-ink-2); }
-  .taste__lines li { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .taste__sum { display: none; }
+  .taste__empty { grid-row: 1 / -1; grid-column: 2 / -1; }
+  .taste__pattern, .taste__note { grid-row: 2; grid-column: 1 / -1; }
+  .taste__pattern { display: flex; align-items: baseline; gap: var(--space-md); min-width: 0; overflow: hidden; white-space: nowrap; mask-image: linear-gradient(to right, var(--color-ink) calc(100% - var(--space-lg)), transparent); }
+  .taste__note { display: block; flex-shrink: 0; font-size: var(--text-xs); line-height: 20px; color: var(--color-muted); }
+  .taste__lines { display: flex; gap: var(--space-md); min-width: 0; margin: 0; padding: 0; list-style: none; font-size: var(--text-sm); line-height: 20px; color: var(--color-ink-2); }
+  .taste__lines li { flex-shrink: 0; }
   .taste__lines strong { color: var(--color-ink); }
   .taste__base { color: var(--color-muted); }
 }
