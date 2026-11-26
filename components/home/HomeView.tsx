@@ -27,7 +27,7 @@ import { withUtm } from "@/lib/utm";
 import { useVisits, type VisitRecord } from "@/lib/visits";
 import { RegionChips, ThemeChips } from "./Chips";
 import { CURATION_MAX, Curation } from "./Curation";
-import { MapSection, type MapSectionHandle } from "./MapSection";
+import { MapSection } from "./MapSection";
 import { Receipt } from "./Receipt";
 import { homeRegions, RegionPanel } from "./RegionAdd";
 import { TasteSummary, useHydrated } from "./TasteSummary";
@@ -462,11 +462,6 @@ export function HomeView({ data }: { data: HomeData }) {
     first?.focus();
   };
 
-  // 지역 줄의 지도 보기: 지도 섹션이 그려질 때만 버튼을 둔다(조회 실패, 0건, 빈 테마에는 없다). 큐레이션 순서는 그대로다.
-  const mapRef = useRef<MapSectionHandle>(null);
-  const mapShown = nameOnly ? nameMapped.length > 0 : !!dataset && pool.length > 0 && themed.length > 0;
-  const onMap = useCallback(() => mapRef.current?.reveal(), []);
-
   const themeLabel = THEMES.find((t) => t.id === theme)?.label ?? "";
 
   // ----- 내 저장 패턴과 비슷한 곳 -----
@@ -528,7 +523,6 @@ export function HomeView({ data }: { data: HomeData }) {
           denied={denied}
           hrefFor={regionHref}
           onNear={onNear}
-          onMap={mapShown ? onMap : undefined}
           panelId={regionPanelId}
           panelOpen={regionPanel !== null}
           onAdd={() => setRegionPanel((m) => (m ? null : "add"))}
@@ -583,7 +577,6 @@ export function HomeView({ data }: { data: HomeData }) {
       {nameOnly ? (
         nameMapped.length > 0 ? (
           <MapSection
-            ref={mapRef}
             stores={nameMapped}
             origin={origin?.point ?? null}
             originLabel={origin?.label ?? ""}
@@ -632,7 +625,6 @@ export function HomeView({ data }: { data: HomeData }) {
           {/* 지도와 전체 매장이 칩 바로 아래(첫 화면)에 온다. 내 저장 요약은 그 아래, 큐레이션 위 */}
           {themed.length > 0 ? (
             <MapSection
-              ref={mapRef}
               stores={themed}
               origin={origin?.point ?? null}
               originLabel={origin?.label ?? ""}

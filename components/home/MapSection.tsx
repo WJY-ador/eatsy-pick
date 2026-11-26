@@ -1,21 +1,14 @@
 "use client";
 
 import "@/app/mapsection.css";
-import { type Ref, useCallback, useEffect, useId, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { StoreMap } from "@/components/StoreMap";
 import { AREA_SEARCH_MAX_KM, type MapView, type PanStore } from "@/lib/area-search";
 import { distanceM } from "@/lib/store-view";
-import { holdTop } from "@/lib/top-fold";
 import type { Store } from "@/lib/stores";
 import { StoreCard } from "./StoreCard";
 
 type Point = { lat: number; lng: number };
-
-/** 홈의 지도 보기 버튼이 부르는 동작 */
-export type MapSectionHandle = {
-  /** 지금 조건 그대로 지도 섹션을 고정 머리말 바로 아래로 올리고 제목에 포커스를 둔다. 주소는 바꾸지 않는다 */
-  reveal: () => void;
-};
 
 export type MapSectionProps = {
   /** 지역, 프랜차이즈, 테마를 적용한 뒤의 후보(큐레이션과 같은 집합) */
@@ -50,7 +43,6 @@ export type MapSectionProps = {
   panStores?: PanStore[];
   /** 옮긴 동네 핀을 누르면 그 매장 id로 부른다 */
   onPanPick?: (id: string) => void;
-  ref?: Ref<MapSectionHandle>;
 };
 
 /** 우선 이름 라벨을 붙여 보는 매장 수(매출 상위 순). 겹치면 끈다 */
@@ -66,18 +58,6 @@ function byRank(a: Row, b: Row): number {
   return ra === rb ? a.i - b.i : ra - rb;
 }
 
-/** 스크롤한 뒤 고정 머리말(상단 바)이 가릴 높이. 지금 붙어 있지 않아도 top 값 자리에 붙는다고 보고 센다 */
-function stuckHeight(): number {
-  let bottom = 0;
-  for (const el of document.querySelectorAll("header")) {
-    const cs = getComputedStyle(el);
-    if (cs.position !== "sticky" && cs.position !== "fixed") continue;
-    const top = Number.parseFloat(cs.top);
-    bottom = Math.max(bottom, (Number.isFinite(top) ? top : 0) + el.getBoundingClientRect().height);
-  }
-  return Math.round(bottom);
-}
-
 /**
  * 지도와 전체 매장. 768px 이상은 왼쪽 목록 40%, 오른쪽 지도 60%.
  * 768px 미만은 섹션이 접힌 상단 바 아래 화면 높이를 채우고 위가 지도(높이 상한이 있다), 남은 아래가 목록이다(목록만 따로 스크롤한다. app/mapsection.css).
@@ -85,10 +65,8 @@ function stuckHeight(): number {
  * 확대, 묶음 풀기, 정렬은 서버를 부르지 않는다(정렬 주소 반영은 onSort를 받은 쪽이 history로 한다).
  * 지도 이동은 onPanView를 받은 쪽이 조건에 맞을 때만 옮긴 동네 핀을 조회한다(lib/area-search.ts).
  */
-export function MapSection({ stores, origin, originLabel, focus, me, near, locateState, onLocate, selectedId, onOpen, sort, onSort, onAreaSearch, onPanView, panStores, onPanPick, ref }: MapSectionProps) {
+export function MapSection({ stores, origin, originLabel, focus, me, near, locateState, onLocate, selectedId, onOpen, sort, onSort, onAreaSearch, onPanView, panStores, onPanPick }: MapSectionProps) {
   const headId = useId();
-  const sectionRef = useRef<HTMLElement>(null);
-  const titleRef = useRef<HTMLHeadingElement>(null);
   const listRef = useRef<HTMLOListElement>(null);
   const [hoverId, setHoverId] = useState<string | null>(null);
   // 영수증을 닫아도 마지막으로 연 매장을 지도와 목록에서 계속 표시한다.
@@ -182,48 +160,11 @@ export function MapSection({ stores, origin, originLabel, focus, me, near, locat
 
   const count = rows.length;
 
-  // 지도 보기(홈 지역 줄): 지도 인스턴스, 조건, 선택, 정렬은 그대로 두고 자리만 옮긴다. 주소 기록을 남기지 않으려고 해시 대신 스크롤한다.
-  // html의 scroll-padding-top(768px 이상 96px, 미만은 펼친 상단 바 높이)이 scrollIntoView에 더해지므로, 고정 머리말 높이로 직접 계산한다.
-  // 768px 미만은 아래로 옮기므로 상단 바를 먼저 접어 묶고(바로잡기 스크롤까지 다시 펼치지 않게) 접힌 높이를 쓴다.
-  // 그 높이는 섹션 높이를 정하는 CSS의 --mapsec-top(상단 바 - 접히는 부분)과 같아서, 도착하면 섹션이 화면 아래 끝까지 맞는다.
-  // 부드러운 스크롤 중에 위쪽 높이가 바뀌면(추천 섹션이 늦게 끼어드는 경우 등) 멈춘 뒤 한 번 바로잡는다. 그 사이 사용자가 스크롤하면 바로잡지 않는다.
-  useImperativeHandle(
-    ref,
-    () => ({
-      reveal: () => {
-        const sec = sectionRef.current;
-        if (!sec) return;
-        const top = holdTop(true) ?? stuckHeight();
-        window.requestAnimationFrame(() => {
-          const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-          window.scrollTo({ top: window.scrollY + sec.getBoundingClientRect().top - top, behavior: still ? "auto" : "smooth" });
-          titleRef.current?.focus({ preventScroll: true });
-          let done = false;
-          const stop = () => {
-            done = true;
-            window.removeEventListener("scrollend", settle);
-            for (const t of ["wheel", "touchstart", "keydown"] as const) window.removeEventListener(t, stop);
-          };
-          const settle = () => {
-            if (done) return;
-            stop();
-            const off = sec.getBoundingClientRect().top - top;
-            if (Math.abs(off) > 2) window.scrollTo({ top: window.scrollY + off, behavior: "auto" });
-          };
-          window.addEventListener("scrollend", settle);
-          for (const t of ["wheel", "touchstart", "keydown"] as const) window.addEventListener(t, stop, { passive: true });
-          window.setTimeout(settle, 1200);
-        });
-      },
-    }),
-    [],
-  );
-
   return (
-    <section ref={sectionRef} className="mapsec" data-testid="map-section" aria-labelledby={headId}>
+    <section className="mapsec" data-testid="map-section" aria-labelledby={headId}>
       <div className="mapsec__head">
         <div className="mapsec__titles">
-          <h2 id={headId} ref={titleRef} className="mapsec__title" tabIndex={-1}>
+          <h2 id={headId} className="mapsec__title">
             지도와 전체 매장
           </h2>
           <p className="mapsec__sub">

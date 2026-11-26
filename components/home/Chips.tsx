@@ -28,7 +28,7 @@ export function sameScope(a: HomeScope, b: HomeScope): boolean {
  * 지역 줄. 칩은 평범한 링크라 스크립트 없이도 간다(서버 조회). 내 주변은 위치를 묻는 버튼이다.
  * 눌렀는데 위치가 막혀 있으면(denied) 안내 카드 없이 이 버튼만 흐리게 하고 핀 아이콘에 사선을 긋는다.
  * regions는 홈 칩 목록(RegionAdd.tsx homeRegions). 서버와 첫 수화는 기본 칩 다섯 곳, 수화 뒤 이 기기에 저장한 목록이다.
- * 줄 끝(가로로 넘기는 칩 줄 밖)에 지역 추가 버튼, onMap이 있으면 지도 보기 버튼을 둔다. 지도 섹션이 그려질 때만 onMap을 넘긴다.
+ * 줄 끝(가로로 넘기는 칩 줄 밖)에 지역 추가 버튼을 둔다.
  */
 export function RegionChips({
   regions,
@@ -38,7 +38,6 @@ export function RegionChips({
   denied,
   hrefFor,
   onNear,
-  onMap,
   panelId,
   panelOpen,
   onAdd,
@@ -51,8 +50,6 @@ export function RegionChips({
   denied: boolean;
   hrefFor: (scope: HomeScope) => string;
   onNear: () => void;
-  /** 지도 섹션으로 바로 간다. 없으면 버튼을 그리지 않는다 */
-  onMap?: () => void;
   panelId: string;
   panelOpen: boolean;
   onAdd: () => void;
@@ -135,20 +132,12 @@ export function RegionChips({
           </NavLink>
         ))}
       </div>
-      <button type="button" className="mapjump regionadd" data-testid="region-add" aria-expanded={panelOpen} aria-controls={panelId} aria-label="지역 추가와 편집" onClick={onAdd}>
+      <button type="button" className="regionadd" data-testid="region-add" aria-expanded={panelOpen} aria-controls={panelId} aria-label="지역 추가와 편집" onClick={onAdd}>
         <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false">
           <path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
         </svg>
         <span className="regionadd__text">지역 추가</span>
       </button>
-      {onMap ? (
-        <button type="button" className="mapjump" data-testid="map-jump" onClick={onMap}>
-          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false">
-            <path d="M9 4 3 6.5v13.5l6-2.5 6 2.5 6-2.5V4l-6 2.5L9 4Zm0 0v13.5m6-11v13.5" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinejoin="round" />
-          </svg>
-          지도 보기
-        </button>
-      ) : null}
     </div>
   );
 }
