@@ -2,6 +2,7 @@
 
 // 내 위치(정밀 좌표)는 이 모듈의 메모리에만 둔다. URL, 공유 링크, OG, 서버 요청, 저장소에 넣지 않는다.
 // 페이지를 새로 불러오면 사라진다. 소프트 내비게이션(/?loc=...&near=1) 사이에서는 유지된다.
+// 저장소에는 홈이 이 세션에 권한 창을 이미 띄웠는지 표시 하나만 둔다(sessionStorage, 좌표 없음).
 
 import { useSyncExternalStore } from "react";
 
@@ -47,7 +48,7 @@ export function useGeo(): GeoState {
 export type LocateError = "blocked" | "off" | "timeout" | "unsupported" | "unavailable";
 
 /** 사이트 위치 권한 상태. Permissions API가 없거나 실패하면 null */
-async function permissionState(): Promise<PermissionState | null> {
+export async function geolocationPermission(): Promise<PermissionState | null> {
   try {
     if (typeof navigator === "undefined" || !navigator.permissions?.query) return null;
     const r = await navigator.permissions.query({ name: "geolocation" as PermissionName });
@@ -65,7 +66,7 @@ export function currentPosition(): Promise<{ lat: number; lng: number }> {
       (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
       (err) => {
         if (err.code === err.PERMISSION_DENIED) {
-          void permissionState().then((st) => reject((st === "denied" ? "blocked" : "off") satisfies LocateError));
+          void geolocationPermission().then((st) => reject((st === "denied" ? "blocked" : "off") satisfies LocateError));
           return;
         }
         reject((err.code === err.TIMEOUT ? "timeout" : "unavailable") satisfies LocateError);
@@ -75,7 +76,21 @@ export function currentPosition(): Promise<{ lat: number; lng: number }> {
   });
 }
 
-/** 권한이 이미 허용됐는가. Permissions API가 없거나 실패하면 false(묻지 않는다) */
-export async function geolocationGranted(): Promise<boolean> {
-  return (await permissionState()) === "granted";
+const AUTO_ASKED_KEY = "eatsy:geo-asked";
+
+/** 홈이 이 세션에 권한 창을 이미 띄웠는가. 저장소를 못 쓰면 띄운 것으로 본다(새로 열 때마다 다시 묻지 않게) */
+export function autoAskedInSession(): boolean {
+  try {
+    return window.sessionStorage.getItem(AUTO_ASKED_KEY) === "1";
+  } catch {
+    return true;
+  }
+}
+
+export function markAutoAsked() {
+  try {
+    window.sessionStorage.setItem(AUTO_ASKED_KEY, "1");
+  } catch {
+    // 저장소를 못 쓰면 autoAskedInSession이 이미 참이다
+  }
 }

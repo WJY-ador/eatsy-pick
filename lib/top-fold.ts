@@ -11,7 +11,7 @@ export const TOP_FOLD_MQ = "(max-width: 767.98px)";
 const FOLD_PX = 24;
 /** 같은 방향으로 이만큼 올라가면 펼친다 */
 const UNFOLD_PX = 12;
-/** holdTop이 상태를 묶어 두는 최소 시간. 지도 보기의 바로잡기(최대 1200ms 뒤)보다 길다 */
+/** holdTop이 상태를 묶어 두는 최소 시간. 코드가 시작한 부드러운 스크롤이 끝날 만큼 길다 */
 const HOLD_MS = 1500;
 /** 묶인 동안 스크롤이 이어지면 마지막 스크롤 뒤 이만큼 더 묶는다 */
 const HOLD_TAIL_MS = 250;
