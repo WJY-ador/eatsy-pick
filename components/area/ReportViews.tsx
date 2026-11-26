@@ -1,4 +1,5 @@
 // 상권 랭킹과 업종별 랭킹 본문. 기본 상권(/area/[slug])과 직접 추가한 지역(/area/place)이 같이 쓴다. 서버 컴포넌트.
+// 가게 순위는 RankTable 카드형 목록으로 그린다. 참고 이미지 안내와 대표 피크 뜻은 페이지 첫 목록 위에 한 번만 둔다(RankNote).
 // 지도와 영수증에 넘길 매장은 여기서 랭킹 행을 Store로 바꿔 props로 넘긴다(지도를 열 때 다시 조회하지 않는다).
 
 import Link from "next/link";
@@ -12,7 +13,7 @@ import { type AreaView, viewHref } from "./view";
 
 const DAY_FULL: Record<string, string> = { 월: "월요일", 화: "화요일", 수: "수요일", 목: "목요일", 금: "금요일", 토: "토요일", 일: "일요일" };
 
-/** 여러 표에 나온 매장은 매장 ID로 하나만(처음 나온 순서) */
+/** 여러 목록에 나온 매장은 매장 ID로 하나만(처음 나온 순서) */
 function storesOf(rows: Row[]): Store[] {
   const m = new Map<string, Store>();
   for (const r of rows) {
@@ -22,7 +23,7 @@ function storesOf(rows: Row[]): Store[] {
   return [...m.values()];
 }
 
-/** 표 위 범위 문구. 역과 기본 상권은 중심과 반경, 구와 동은 주소 범위 전체 */
+/** 목록 위 범위 문구. 역과 기본 상권은 중심과 반경, 구와 동은 주소 범위 전체 */
 function scopeLine(v: AreaView, radius: number | null): string {
   return v.scopeName ?? `${v.centerName} ${radiusLabel(radius)}`;
 }
@@ -43,6 +44,16 @@ function Crumbs({ v, group }: { v: AreaView; group?: boolean }) {
   );
 }
 
+/** 썸네일이 실제 매장 사진이 아니라는 안내(홈 Curation.tsx와 같은 문구)와 대표 피크 띠의 뜻. 페이지에 한 번 */
+function RankNote() {
+  return (
+    <>
+      <p className="catimg-note">사진은 업종 참고 이미지입니다</p>
+      <p className="catimg-note">대표 피크는 최근 1개월 결제로 본 가장 붐비는 요일과 시간대입니다</p>
+    </>
+  );
+}
+
 function PlaceNote({ v }: { v: AreaView }) {
   if (v.kind === "preset") return null;
   return (
@@ -56,6 +67,7 @@ function PlaceNote({ v }: { v: AreaView }) {
 
 export function AreaReportBody({ v, r }: { v: AreaView; r: AreaReport }) {
   const rows = r.groups.flatMap((g) => g.rows);
+  const firstListed = r.groups.findIndex((g) => g.rows.length > 0);
   const lede =
     v.kind === "region"
       ? `${v.scopeName?.replace(/ 전체$/, "")} 주소의 가게를 업종별로 시군구 매출 순위가 높은 순서로 5곳씩 보여 줍니다. 프랜차이즈는 뒤로 내렸습니다.`
@@ -68,7 +80,7 @@ export function AreaReportBody({ v, r }: { v: AreaView; r: AreaReport }) {
       <PlaceNote v={v} />
       <AreaSwitch currentKey={v.key} currentName={v.title} group={null} />
       <AreaMapPanel stores={storesOf(rows)} center={v.center} centerName={v.centerName} what="이 랭킹에 실린 매장" />
-      {r.groups.map((g) => (
+      {r.groups.map((g, gi) => (
         <section key={g.group.slug} className="report__group" aria-labelledby={`g-${g.group.slug}`}>
           <div className="report__ghead">
             <h2 id={`g-${g.group.slug}`} className="report__gh">
@@ -77,6 +89,7 @@ export function AreaReportBody({ v, r }: { v: AreaView; r: AreaReport }) {
             <p className="report__gmeta">
               {scopeLine(v, g.radius)}, {g.group.categories[0]} 기준
             </p>
+            {gi === firstListed ? <RankNote /> : null}
           </div>
           {g.rows.length > 0 ? (
             <RankTable rows={g.rows} caption={`${v.title} ${g.group.name} 결제 순위 상위 ${g.rows.length}곳`} />
@@ -147,9 +160,12 @@ export function GroupReportBody({ v, r }: { v: AreaView; r: GroupReport }) {
         <p className="report__note">표본이 {MIN_SAMPLE}곳 미만이라 분포 요약을 내지 않습니다.</p>
       )}
       <section className="report__group" aria-labelledby="tbl-h">
-        <h2 id="tbl-h" className="report__gh">
-          시군구 매출 상위 {r.rows.length}곳
-        </h2>
+        <div className="report__ghead">
+          <h2 id="tbl-h" className="report__gh">
+            시군구 매출 상위 {r.rows.length}곳
+          </h2>
+          {r.rows.length > 0 ? <RankNote /> : null}
+        </div>
         {r.rows.length > 0 ? (
           <RankTable rows={r.rows} caption={`${v.title} ${group.name} 결제 순위 상위 ${r.rows.length}곳`} />
         ) : (
