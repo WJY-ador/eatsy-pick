@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { cache } from "react";
 import { HomeView } from "@/components/home/HomeView";
 import { ResolvedUrl } from "@/components/home/ResolvedUrl";
+import { TodayMenu } from "@/components/home/TodayMenu";
 import { NavDone } from "@/components/NavLink";
 import { AREAS } from "@/lib/areas";
 import { foodDisplayName } from "@/lib/food";
@@ -176,6 +177,8 @@ export default async function Home({ searchParams }: PageProps<"/">) {
       <NavDone navKey={JSON.stringify(sp)} />
       {to ? <ResolvedUrl to={to} /> : null}
       <HomeView key={`${JSON.stringify(scopeInput(h.scope))}|${h.q ?? ""}|${h.food ?? ""}|${h.near ? 1 : 0}`} data={data} />
+      {/* 오늘 뭐먹지: 지역 홈일 때만(범위 없는 이름 검색과 조회 실패는 지역이 없다). HomeView 밖에 둬 지역 홈 사이를 옮겨도 대화가 남는다 */}
+      {dataset ? <TodayMenu scope={h.scope} near={h.near} title={dataset.title} queries={dataset.queries} /> : null}
     </main>
   );
 }
