@@ -9,8 +9,8 @@ import { MerLink } from "./MerLink";
 
 /**
  * 결제 랭킹 목록. 순위 순서 그대로 ol/li 카드형 행으로 그린다(가로 스크롤 없음, 넓은 화면은 2열).
- * 행: 순위 숫자, 업종 참고 이미지 썸네일, 가게명과 업종, 시군구 매출 상위 N% 게이지, 대표 피크 띠, 고객층 1위 칩, 잇플 링크.
- * 게이지는 aria-hidden이고 옆 글자가 같은 값을 낸다. 피크 띠는 role="img" + aria-label로 읽는다.
+ * 행: 순위 숫자, 업종 참고 이미지 썸네일, 가게명과 업종, 시군구 매출 상위 N% 글자, 대표 피크 띠, 고객층 1위 칩, 잇플 링크.
+ * 피크 띠는 role="img" + aria-label로 읽는다.
  * 참고 이미지 안내 한 줄은 페이지에 한 번만 둔다(ReportViews RankNote).
  */
 export function RankTable({ rows, caption }: { rows: Row[]; caption: string }) {
@@ -43,7 +43,7 @@ function RankItem({ r, no }: { r: Row; no: number }) {
         {it.merTpbuzNm ? <p className="rank__cat">{it.merTpbuzNm}</p> : null}
       </div>
       <div className="rank__body">
-        <SalesGauge sigungu={r.sigungu} value={it.ccgSaleRnk} />
+        <SalesRank sigungu={r.sigungu} value={it.ccgSaleRnk} />
         <PeakStrips day={it.congestionDwk} time={it.congestionTizn} />
         <div className="rank__foot">
           <p className="rank__cust">
@@ -57,8 +57,8 @@ function RankItem({ r, no }: { r: Row; no: number }) {
   );
 }
 
-/** 시군구 매출 상위 N%: 글자는 원본 값 그대로(percentLabel). 게이지는 0~100% 선형 눈금에서 값 위치를 점으로 찍고 왼쪽 끝을 상위로 둔다 */
-function SalesGauge({ sigungu, value }: { sigungu: string; value: number | null | undefined }) {
+/** 시군구 매출 상위 N%: 원본 값 그대로(percentLabel) 글자로만 적는다 */
+function SalesRank({ sigungu, value }: { sigungu: string; value: number | null | undefined }) {
   const where = sigungu || "시군구";
   const ok = typeof value === "number" && Number.isFinite(value);
   if (!ok) {
@@ -68,20 +68,10 @@ function SalesGauge({ sigungu, value }: { sigungu: string; value: number | null 
       </p>
     );
   }
-  const pos = Math.min(100, Math.max(0, value));
   return (
-    <div className="rank__pct">
-      <p className="rank__pct-text">
-        {where} 매출 <strong className="num">상위 {percentLabel(value)}</strong>
-      </p>
-      <div className="rank-gauge" aria-hidden="true">
-        <span className="rank-gauge__end">상위</span>
-        <span className="rank-gauge__track">
-          <span className="rank-gauge__dot" style={{ left: `${pos}%` }} />
-        </span>
-        <span className="rank-gauge__end">하위</span>
-      </div>
-    </div>
+    <p className="rank__pct-text">
+      {where} 매출 <strong className="num">상위 {percentLabel(value)}</strong>
+    </p>
   );
 }
 
