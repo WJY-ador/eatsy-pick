@@ -79,7 +79,7 @@
 .tm-qr::-webkit-scrollbar { display: none; }
 /* 분류 칩 전부(여러 줄): 높이 상한을 늘 반 줄에서 끊어 잘린 줄로 세로 스크롤을 알린다(스크롤바는 숨긴다). 줄 간격은 칩 44 + 틈 8px.
  * 화면이 낮으면 줄 수를 줄여 첫 말풍선과 입력창 자리를 남긴다(모바일 시트, 데스크톱 패널 같은 값). 위아래 여백 4px은 포커스 테두리가 잘리지 않게 둔다. */
-.tm-qr[data-wrap] { flex-wrap: wrap; max-height: calc(var(--space-2xs) + 4.5 * 44px + 4 * var(--space-xs)); padding-block: var(--space-2xs); overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; }
+.tm-qr[data-wrap] { flex-wrap: wrap; max-height: calc(var(--space-2xs) + 5.5 * 44px + 5 * var(--space-xs)); padding-block: var(--space-2xs); overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; }
 @media (max-height: 720px) { .tm-qr[data-wrap] { max-height: calc(var(--space-2xs) + 3.5 * 44px + 3 * var(--space-xs)); } }
 @media (max-height: 580px) { .tm-qr[data-wrap] { max-height: calc(var(--space-2xs) + 2.5 * 44px + 2 * var(--space-xs)); } }
 .tm-chip { animation: tm-pop 320ms var(--ease-out) both; cursor: pointer; }
