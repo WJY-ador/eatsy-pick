@@ -7,8 +7,6 @@ import { AI_CATEGORIES, FOOD_WORDS, MENU_CATEGORIES, VAGUE_CATEGORY, foodCategor
 import { type HomeScope, isAddressLike } from "./home-params";
 import type { Store } from "./stores";
 
-/** 처음 보이는 칩 수. 나머지는 더 보기로 연다 */
-export const CHIP_FIRST = 8;
 /** 칩: 소분류 33종(기타 제외), 정의서 순서. 대분류는 소분류와 겹쳐 칩으로 띄우지 않고 입력으로만 찾는다 */
 export const MENU_CHIPS: string[] = AI_CATEGORIES.filter((c) => c !== VAGUE_CATEGORY);
 /** 입력으로 찾는 분류: 43종에서 기타를 뺀 42종 */

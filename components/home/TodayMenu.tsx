@@ -10,7 +10,6 @@ import { ATTRIBUTION } from "@/lib/site";
 import { displayName, percentLabel } from "@/lib/store-view";
 import {
   CARD_COUNT,
-  CHIP_FIRST,
   INPUT_MAX,
   MENU_CHIPS,
   type MenuFilter,
@@ -41,7 +40,7 @@ type Entry =
 type NewEntry = Entry extends infer E ? (E extends Entry ? Omit<E, "id"> : never) : never;
 
 type Quick =
-  | { kind: "menu"; all: boolean }
+  | { kind: "menu" }
   | { kind: "after"; category: string; pool: MenuStore[] }
   | { kind: "pick"; categories: string[] }
   | { kind: "retry"; category: string }
@@ -50,7 +49,6 @@ type Quick =
 /** 칩이 하는 일. 칩은 이 값만 들고 누르면 Chat의 run이 처리한다 */
 type Act =
   | { t: "pick"; category: string; clear?: boolean }
-  | { t: "more" }
   | { t: "other" }
   | { t: "all"; category: string }
   | { t: "narrow"; only: "local" | "hoesik" };
@@ -210,7 +208,7 @@ function Chat({ region, onLeave }: { region: Region; onLeave: () => void }) {
       window.setTimeout(() => {
         setTyping(false);
         push({ role: "bot", text: "오늘 뭐 먹을지 골라 볼까요? 메뉴를 누르거나 먹고 싶은 걸 적어 주세요.", note: `${region.title} 가게에서 찾아요.` });
-        setQuick({ kind: "menu", all: false });
+        setQuick({ kind: "menu" });
         setBusy(false);
       }, TYPING_MS),
     );
@@ -220,13 +218,19 @@ function Chat({ region, onLeave }: { region: Region; onLeave: () => void }) {
     };
   }, [push, region.title]);
 
-  // 새 말풍선이 붙으면 맨 아래로.
+  // 입력하는 동안에는 맞는 분류를 칩으로 보인다(맞는 것이 없으면 원래 칩).
+  const said = text.replace(/\s+/g, " ").trim();
+  const typed = said ? matchMenu(said) : [];
+  // 분류 칩 전부는 여러 줄로 감는다(높이 상한과 세로 스크롤은 app/today-menu.css .tm-qr[data-wrap]). 나머지 칩은 한 줄 가로 스크롤.
+  const wrap = quick?.kind === "menu" && typed.length === 0;
+
+  // 새 말풍선이 붙거나 칩 영역이 여러 줄로 커지면(log가 줄어든다) 맨 아래로.
   useEffect(() => {
     const log = logRef.current;
     if (!log) return;
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     log.scrollTo({ top: log.scrollHeight, behavior: reduce ? "auto" : "smooth" });
-  }, [entries.length, typing]);
+  }, [entries.length, typing, wrap]);
 
   const pick = (category: string, said: string = category) => {
     if (busy) return;
@@ -257,7 +261,7 @@ function Chat({ region, onLeave }: { region: Region; onLeave: () => void }) {
                 ? `${region.title} ${category} 가게는 프랜차이즈를 빼니 남는 곳이 없어요. 다른 분류를 골라 주세요.`
                 : `${region.title}에서 ${category} 가게를 찾지 못했어요. 다른 분류를 골라 주세요.`;
             push({ role: "bot", text });
-            setQuick({ kind: "menu", all: false });
+            setQuick({ kind: "menu" });
           } else {
             push({ role: "result", text: `${region.title} ${category} 매출 상위 가게예요`, stores: pool.slice(0, CARD_COUNT) });
             setQuick({ kind: "after", category, pool });
@@ -321,29 +325,21 @@ function Chat({ region, onLeave }: { region: Region; onLeave: () => void }) {
     if (one) return pick(one, said);
     const many = matchMenu(said);
     if (many.length > 0) reply(said, "이 분류 중에서 골라 주세요.", { kind: "pick", categories: many });
-    else reply(said, "그 메뉴는 잇플 분류에 없어요. 아래 분류에서 골라 주세요.", { kind: "menu", all: false });
+    else reply(said, "그 메뉴는 잇플 분류에 없어요. 아래 분류에서 골라 주세요.", { kind: "menu" });
   };
 
   // 칩은 값(Act)으로만 그리고, 누르면 run이 처리한다(렌더 중에 핸들러를 부르지 않는다).
   const run = (act: Act) => {
     if (act.t === "pick") pick(act.category);
-    else if (act.t === "more") setQuick({ kind: "menu", all: true });
-    else if (act.t === "other") reply("다른 메뉴", "어떤 메뉴로 볼까요?", { kind: "menu", all: false });
+    else if (act.t === "other") reply("다른 메뉴", "어떤 메뉴로 볼까요?", { kind: "menu" });
     else if (act.t === "all") viewAll(act.category);
     else if (quick?.kind === "after") narrow(quick, act.only);
   };
 
-  // 입력하는 동안에는 맞는 분류를 칩으로 보인다(맞는 것이 없으면 원래 칩).
-  const said = text.replace(/\s+/g, " ").trim();
-  const typed = said ? matchMenu(said) : [];
   const other: Chip = { label: "다른 메뉴", act: { t: "other" }, tone: "quiet" };
   let chips: Chip[] = [];
   if (typed.length > 0) chips = typed.map((c) => ({ label: c, act: { t: "pick", category: c, clear: true } }));
-  else if (quick?.kind === "menu")
-    chips = [
-      ...(quick.all ? MENU_CHIPS : MENU_CHIPS.slice(0, CHIP_FIRST)).map((c): Chip => ({ label: c, act: { t: "pick", category: c } })),
-      ...(quick.all ? [] : [{ label: "더 보기", act: { t: "more" }, tone: "quiet" } as Chip]),
-    ];
+  else if (quick?.kind === "menu") chips = MENU_CHIPS.map((c): Chip => ({ label: c, act: { t: "pick", category: c } }));
   else if (quick?.kind === "pick") chips = [...quick.categories.map((c): Chip => ({ label: c, act: { t: "pick", category: c } })), other];
   else if (quick?.kind === "retry") chips = [{ label: "다시 찾기", act: { t: "pick", category: quick.category } }, other];
   else if (quick?.kind === "after")
@@ -391,7 +387,7 @@ function Chat({ region, onLeave }: { region: Region; onLeave: () => void }) {
       </div>
       <div className="tm-foot">
         {chips.length > 0 ? (
-          <div className="tm-qr" data-wrap={quick?.kind === "menu" && quick.all && typed.length === 0 ? "true" : undefined} role="group" aria-label="빠른 답장">
+          <div className="tm-qr" data-wrap={wrap ? "true" : undefined} role="group" aria-label="빠른 답장">
             {chips.map((c) => (
               <button
                 key={c.label}
